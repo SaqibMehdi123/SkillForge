@@ -24,6 +24,7 @@ import {
   DialogContentText,
   DialogActions,
   Snackbar,
+  Badge,
 } from '@mui/material';
 import {
   PersonAdd as PersonAddIcon,
@@ -32,6 +33,7 @@ import {
   Close as CloseIcon,
   Chat as ChatIcon,
   Search as SearchIcon,
+  People as PeopleIcon,
 } from '@mui/icons-material';
 import { 
   getFriends, 
@@ -44,6 +46,7 @@ import {
   clearFriendsError
 } from '../../features/friends/friendsSlice';
 import { Link as RouterLink } from 'react-router-dom';
+import FindUsers from './FindUsers';
 
 function TabPanel({ children, value, index, ...other }) {
   return (
@@ -138,9 +141,27 @@ const Friends = () => {
       <Paper sx={{ width: '100%', mb: 2 }}>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={tabValue} onChange={handleTabChange} centered>
-            <Tab label={`Friends (${friends.length})`} />
-            <Tab label={`Requests (${pendingRequests.length})`} />
-            <Tab label="Add Friend" />
+            <Tab 
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <span style={{ marginRight: '8px' }}>Friends</span> 
+                  <Badge badgeContent={friends.length} color="primary">
+                    <PeopleIcon />
+                  </Badge>
+                </Box>
+              } 
+            />
+            <Tab 
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <span style={{ marginRight: '8px' }}>Requests</span>
+                  <Badge badgeContent={pendingRequests.length} color="error">
+                    <PersonAddIcon />
+                  </Badge>
+                </Box>
+              } 
+            />
+            <Tab label="Find Users" />
           </Tabs>
         </Box>
 
@@ -270,31 +291,9 @@ const Friends = () => {
           )}
         </TabPanel>
 
-        {/* Add Friend Tab */}
+        {/* Find Users Tab */}
         <TabPanel value={tabValue} index={2}>
-          <Box component="form" onSubmit={(e) => { e.preventDefault(); handleAddFriend(); }}>
-            <Typography variant="body1" gutterBottom>
-              Enter a username to send a friend request:
-            </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <TextField
-                fullWidth
-                variant="outlined"
-                placeholder="Username"
-                value={friendUsername}
-                onChange={(e) => setFriendUsername(e.target.value)}
-                sx={{ mr: 2 }}
-              />
-              <Button
-                variant="contained"
-                startIcon={<PersonAddIcon />}
-                onClick={handleAddFriend}
-                disabled={loading || !friendUsername.trim()}
-              >
-                Add
-              </Button>
-            </Box>
-          </Box>
+          <FindUsers />
         </TabPanel>
       </Paper>
 

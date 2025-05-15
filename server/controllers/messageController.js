@@ -7,7 +7,7 @@ const fs = require('fs');
 // Send a message
 exports.sendMessage = async (req, res, next) => {
   try {
-    const { recipientId, content } = req.body;
+    const { recipientId, content, practicePhotoUrl } = req.body;
     const senderId = req.user;
     let image = null;
 
@@ -23,21 +23,27 @@ exports.sendMessage = async (req, res, next) => {
       return res.status(403).json({ message: 'You can only send messages to your friends' });
     }
 
+    // Create message data
+    const messageData = {
+      sender: senderId,
+      recipient: recipientId,
+      content: content || '',
+    };
+    
     // Handle image upload if present
     if (req.file) {
-      image = `/uploads/messages/${req.file.filename}`;
+      messageData.image = `/uploads/messages/${req.file.filename}`;
+    } else if (practicePhotoUrl) {
+      // If a practice photo URL is provided, use it
+      messageData.image = practicePhotoUrl;
     }
 
     // Create and save the message
-    const message = await Message.create({
-      sender: senderId,
-      recipient: recipientId,
-      content,
-      image
-    });
+    const message = await Message.create(messageData);
 
     // Populate sender details before returning
     await message.populate('sender', 'username avatar');
+    await message.populate('recipient', 'username avatar');
 
     res.status(201).json({ data: message });
   } catch (err) {
@@ -51,6 +57,11 @@ exports.getConversation = async (req, res, next) => {
     const { userId } = req.params;
     const currentUserId = req.user;
 
+    // Check if the userId is valid
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: 'Invalid user ID' });
+    }
+
     // Verify that the users are friends
     const currentUser = await User.findById(currentUserId);
     if (!currentUser.friends.includes(userId)) {
@@ -58,9 +69,12 @@ exports.getConversation = async (req, res, next) => {
     }
 
     // Get all messages between the two users
+    // Use strict filtering to ensure only messages directly between these two users are returned
     const messages = await Message.find({
       $or: [
+        // Messages from current user to specified friend
         { sender: currentUserId, recipient: userId },
+        // Messages from specified friend to current user
         { sender: userId, recipient: currentUserId }
       ]
     })
@@ -84,7 +98,14 @@ exports.getConversations = async (req, res, next) => {
   try {
     const userId = req.user;
 
+    // First get the user's friends to ensure we only return conversations with friends
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
     // Get all messages where the user is either sender or recipient
+    // And the other party is a friend
     const messages = await Message.aggregate([
       {
         $match: {
@@ -119,6 +140,12 @@ exports.getConversations = async (req, res, next) => {
               ]
             }
           }
+        }
+      },
+      // Only include conversations with friends
+      {
+        $match: {
+          _id: { $in: user.friends }
         }
       },
       {
@@ -162,6 +189,48 @@ exports.uploadMessageImage = async (req, res, next) => {
 
     const imageUrl = `/uploads/messages/${req.file.filename}`;
     res.status(200).json({ imageUrl });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Create a new message
+exports.createMessage = async (req, res, next) => {
+  try {
+    const senderId = req.user;
+    const { recipientId, content, practicePhotoUrl } = req.body;
+    
+    // Check if recipient exists
+    const recipient = await User.findById(recipientId);
+    if (!recipient) {
+      return res.status(404).json({ message: 'Recipient not found' });
+    }
+    
+    // Create message data
+    const messageData = {
+      sender: senderId,
+      recipient: recipientId,
+      content,
+    };
+    
+    // Check if there's an uploaded file
+    if (req.file) {
+      // Save image path
+      messageData.image = `/uploads/messages/${req.file.filename}`;
+    } else if (practicePhotoUrl) {
+      // If a practice photo URL is provided, use it
+      messageData.image = practicePhotoUrl;
+    }
+    
+    // Create and save message
+    const message = await Message.create(messageData);
+    
+    // Populate sender details for the response
+    const populatedMessage = await Message.findById(message._id)
+      .populate('sender', 'username avatar')
+      .populate('recipient', 'username avatar');
+    
+    res.status(201).json({ data: populatedMessage });
   } catch (err) {
     next(err);
   }

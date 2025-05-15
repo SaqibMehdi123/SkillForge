@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
+import { useLocation } from 'react-router-dom';
 import { 
   Box, 
   Container, 
@@ -57,6 +58,7 @@ function getCurrentWeek() {
 
 const PracticeSession = () => {
   const dispatch = useDispatch();
+  const location = useLocation();
   const webcamRef = useRef(null);
   const [addTaskOpen, setAddTaskOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -76,6 +78,20 @@ const PracticeSession = () => {
 
   const sessionIndex = currentTask ? tasks.findIndex(t => t.id === currentTask.id) + 1 : 1;
   const totalSessions = tasks.length;
+
+  // Save current practice session location to localStorage
+  useEffect(() => {
+    if (location.pathname === '/practice') {
+      localStorage.setItem('lastRoute', location.pathname);
+    }
+  }, [location.pathname]);
+  
+  // Also save the location when current task changes
+  useEffect(() => {
+    if (currentTask && location.pathname === '/practice') {
+      localStorage.setItem('lastRoute', location.pathname);
+    }
+  }, [currentTask, location.pathname]);
 
   // Load photos from server on component mount
   useEffect(() => {

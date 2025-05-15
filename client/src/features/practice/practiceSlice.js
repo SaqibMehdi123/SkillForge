@@ -102,13 +102,72 @@ export const getUserPhotos = createAsyncThunk(
   }
 );
 
+// Get user's practice photos
+export const getUserPracticePhotos = createAsyncThunk(
+  'practice/getUserPracticePhotos',
+  async (_, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      };
+      const response = await axios.get(`${API_URL}/practice/photos`, config);
+      
+      // Ensure all photos have proper URLs
+      const photos = response.data.data.map(photo => ({
+        ...photo,
+        // Make sure URL is properly formatted
+        url: photo.url && !photo.url.startsWith('http') ? 
+          `http://localhost:5000${photo.url}` : photo.url
+      }));
+      
+      return photos;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to load practice photos');
+    }
+  }
+);
+
 const API_URL = 'http://localhost:5000/api';
 
-const initialState = {
+// Load saved practice state from localStorage
+const loadPracticeState = () => {
+  try {
+    const savedState = localStorage.getItem('practiceState');
+    if (savedState) {
+      const parsedState = JSON.parse(savedState);
+      
+      // Check if the timer is still valid (hasn't expired)
+      if (parsedState.currentTask && parsedState.currentTask.startTime) {
+        const startTime = parsedState.currentTask.startTime;
+        const duration = parsedState.currentTask.duration * 60; // convert to seconds
+        const elapsedSeconds = Math.floor((Date.now() - startTime) / 1000);
+        
+        // If the timer hasn't expired, adjust the remaining time
+        if (elapsedSeconds < duration) {
+          const remaining = duration - elapsedSeconds;
+          parsedState.currentTask.remaining = remaining;
+          return parsedState;
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error loading practice state:', error);
+  }
+  return null;
+};
+
+// Saved practice state or initial state
+const savedState = loadPracticeState();
+
+const initialState = savedState || {
   tasks: [], // all tasks (active sessions)
   completedTasks: [],
   currentTask: null, // { ...task, startTime, remaining, isRunning }
   photos: [], // Store user photos
+  practicePhotos: [],
   loading: false,
   error: null,
 };
@@ -126,6 +185,7 @@ const practiceSlice = createSlice({
         name: action.payload.name,
         label: action.payload.label || action.payload.name,
       });
+      savePracticeState(state);
     },
     startTask: (state, action) => {
       const task = state.tasks.find((t) => t.id === action.payload);
@@ -139,16 +199,19 @@ const practiceSlice = createSlice({
           isRunning: true,
           progress: 0, // Initialize progress at 0
         };
+        savePracticeState(state);
       }
     },
     pauseTask: (state) => {
       if (state.currentTask) {
         state.currentTask.isRunning = false;
+        savePracticeState(state);
       }
     },
     resumeTask: (state) => {
       if (state.currentTask) {
         state.currentTask.isRunning = true;
+        savePracticeState(state);
       }
     },
     updateTaskTime: (state, action) => {
@@ -168,6 +231,8 @@ const practiceSlice = createSlice({
         if (taskIndex !== -1) {
           state.tasks[taskIndex].progress = progressPercent;
         }
+        
+        savePracticeState(state);
       }
     },
     completeTask: (state) => {
@@ -180,14 +245,17 @@ const practiceSlice = createSlice({
         state.completedTasks.push(completed);
         state.tasks = state.tasks.filter((t) => t.id !== completed.id);
         state.currentTask = null;
+        savePracticeState(state);
       }
     },
     stopTask: (state) => {
       state.currentTask = null;
+      savePracticeState(state);
     },
     setTaskImage: (state, action) => {
       if (state.currentTask) {
         state.currentTask.image = action.payload;
+        savePracticeState(state);
       }
     },
     updateTaskProgress: (state, action) => {
@@ -202,6 +270,12 @@ const practiceSlice = createSlice({
       if (state.currentTask && state.currentTask.id === taskId) {
         state.currentTask.progress = progress;
       }
+      
+      savePracticeState(state);
+    },
+    clearPracticeError: (state) => {
+      state.error = null;
+      savePracticeState(state);
     },
   },
   extraReducers: (builder) => {
@@ -256,9 +330,35 @@ const practiceSlice = createSlice({
       .addCase(getUserPhotos.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      })
+      .addCase(getUserPracticePhotos.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(getUserPracticePhotos.fulfilled, (state, action) => {
+        state.loading = false;
+        state.practicePhotos = action.payload;
+      })
+      .addCase(getUserPracticePhotos.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
       });
   },
 });
+
+// Helper function to save practice state to localStorage
+function savePracticeState(state) {
+  try {
+    // Only save necessary data for timer persistence
+    const stateToSave = {
+      tasks: state.tasks,
+      completedTasks: state.completedTasks,
+      currentTask: state.currentTask,
+    };
+    localStorage.setItem('practiceState', JSON.stringify(stateToSave));
+  } catch (error) {
+    console.error('Error saving practice state:', error);
+  }
+}
 
 export const {
   addTask,
@@ -270,6 +370,7 @@ export const {
   stopTask,
   setTaskImage,
   updateTaskProgress,
+  clearPracticeError,
 } = practiceSlice.actions;
 
 export default practiceSlice.reducer; 

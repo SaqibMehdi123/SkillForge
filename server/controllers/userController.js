@@ -33,4 +33,20 @@ exports.addFriend = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+};
+
+exports.getAllUsers = async (req, res, next) => {
+  try {
+    const currentUserId = req.user;
+    
+    // Get all users except the current user
+    // Only return necessary fields for security
+    const users = await User.find({ _id: { $ne: currentUserId } })
+      .select('username avatar level xp')
+      .sort({ username: 1 });
+    
+    res.status(200).json({ data: users });
+  } catch (err) {
+    next(err);
+  }
 }; 

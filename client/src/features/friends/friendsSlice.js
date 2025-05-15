@@ -3,6 +3,25 @@ import axios from 'axios';
 
 const API_URL = 'http://localhost:5000/api';
 
+// Get all users
+export const getAllUsers = createAsyncThunk(
+  'friends/getAllUsers',
+  async (_, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      };
+      const response = await axios.get(`${API_URL}/users/all`, config);
+      return response.data.data;
+    } catch (error) {
+      return rejectWithValue(error.response.data.message);
+    }
+  }
+);
+
 // Get all friends
 export const getFriends = createAsyncThunk(
   'friends/getFriends',
@@ -140,6 +159,7 @@ const initialState = {
   friends: [],
   pendingRequests: [],
   sentRequests: [],
+  allUsers: [],
   loading: false,
   error: null,
 };
@@ -154,6 +174,18 @@ const friendsSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
+      // Get all users
+      .addCase(getAllUsers.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(getAllUsers.fulfilled, (state, action) => {
+        state.loading = false;
+        state.allUsers = action.payload;
+      })
+      .addCase(getAllUsers.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
       // Get friends
       .addCase(getFriends.pending, (state) => {
         state.loading = true;

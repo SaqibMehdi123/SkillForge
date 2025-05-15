@@ -42,6 +42,7 @@ import {
 } from '@mui/icons-material';
 import { logout, loadUser } from '../../features/auth/authSlice';
 import { toggleTheme } from '../../features/theme/themeSlice';
+import NotificationBadge from '../common/NotificationBadge';
 
 const pages = [
   { name: 'Dashboard', path: '/dashboard', icon: <DashboardIcon /> },
@@ -269,6 +270,9 @@ const Navbar = () => {
                   />
                 </Box>
               )}
+              
+              {/* Notification Badge */}
+              <NotificationBadge />
               
               {/* User Name and Avatar Group */}
               <Box sx={{ display: 'flex', alignItems: 'center', ml: 0.5 }}>
