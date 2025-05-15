@@ -183,49 +183,55 @@ const Navbar = () => {
           ) : (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               {/* XP Bar & Level */}
-              <Box sx={{ minWidth: 120, mr: 1 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography variant="caption" sx={{ color: '#fff', fontWeight: 700, fontSize: 13, minWidth: 20 }}>
-                    XP
-                  </Typography>
-                  <Box sx={{ position: 'relative', flex: 1, minWidth: 60, maxWidth: 90 }}>
-                    <LinearProgress
-                      variant="determinate"
-                      value={xpPercent}
-                      sx={{
-                        height: 18,
-                        borderRadius: 5,
-                        background: '#ede9fe',
-                        '& .MuiLinearProgress-bar': {
-                          backgroundColor: '#fbbf24', // gold
-                        },
-                      }}
-                    />
-                    <Typography 
-                      variant="caption" 
-                      sx={{ 
-                        position: 'absolute', 
-                        top: 0, 
-                        left: 0, 
-                        right: 0, 
-                        textAlign: 'center', 
-                        lineHeight: '18px', 
-                        color: '#fff', 
-                        fontWeight: 600, 
-                        fontSize: 10,
-                        textShadow: '0px 0px 2px rgba(0,0,0,0.7)'
-                      }}
-                    >
-                      {user?.xp || 0} / {xpToNextLevel}
-                    </Typography>
-                  </Box>
-                  <Chip
-                    icon={<LevelIcon sx={{ color: '#fff', fontSize: 18 }} />}
-                    label={typeof user?.level === 'number' ? `Lv${user?.level || 1}` : user?.level || 'Lv1'}
-                    size="small"
-                    sx={{ bgcolor: '#a78bfa', color: '#fff', fontWeight: 700, fontSize: 13, borderRadius: 2, px: 0.5 }}
+              <Box sx={{ mr: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Box sx={{ position: 'relative', width: 100 }}>
+                  <LinearProgress
+                    variant="determinate"
+                    value={xpPercent}
+                    sx={{
+                      height: 22,
+                      borderRadius: 5,
+                      background: '#ede9fe',
+                      '& .MuiLinearProgress-bar': {
+                        backgroundColor: '#fbbf24', // gold
+                      },
+                    }}
                   />
+                  <Typography 
+                    variant="caption" 
+                    sx={{ 
+                      position: 'absolute', 
+                      top: 0, 
+                      left: 0, 
+                      right: 0, 
+                      textAlign: 'center', 
+                      lineHeight: '22px', 
+                      color: '#fff', 
+                      fontWeight: 600, 
+                      fontSize: 10,
+                      textShadow: '0px 0px 2px rgba(0,0,0,0.7)',
+                      display: 'flex',
+                      justifyContent: 'space-evenly',
+                      px: 1
+                    }}
+                  >
+                    <span>XP</span> <span>{user?.xp || 0}/{xpToNextLevel}</span>
+                  </Typography>
                 </Box>
+                <Chip
+                  icon={<LevelIcon sx={{ color: '#fff', fontSize: 16 }} />}
+                  label={typeof user?.level === 'number' ? `Lv${user?.level || 1}` : user?.level || 'Lv1'}
+                  size="small"
+                  sx={{ 
+                    bgcolor: '#a78bfa', 
+                    color: '#fff', 
+                    fontWeight: 700, 
+                    fontSize: 12, 
+                    borderRadius: 2,
+                    height: 22, 
+                    '& .MuiChip-label': { px: 1 } 
+                  }}
+                />
               </Box>
               {/* Badge */}
               {user?.badge && (

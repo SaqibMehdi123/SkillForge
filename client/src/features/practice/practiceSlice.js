@@ -46,7 +46,7 @@ export const getHistory = createAsyncThunk(
 // Add these new async thunks for photo handling
 export const saveTaskPhoto = createAsyncThunk(
   'practice/saveTaskPhoto',
-  async ({ imageData, taskName }, { rejectWithValue }) => {
+  async ({ imageData, taskName, taskCategory, taskPriority, timestamp }, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
       const config = {
@@ -58,7 +58,13 @@ export const saveTaskPhoto = createAsyncThunk(
       
       const response = await axios.post(
         `${API_URL}/photos`, 
-        { imageData, taskName },
+        { 
+          imageData, 
+          taskName,
+          taskCategory,
+          taskPriority, 
+          timestamp 
+        },
         config
       );
       
@@ -117,6 +123,8 @@ const practiceSlice = createSlice({
         id: Date.now(),
         progress: 0,
         completed: false,
+        name: action.payload.name,
+        label: action.payload.label || action.payload.name,
       });
     },
     startTask: (state, action) => {

@@ -126,8 +126,16 @@ const CircularTimer = ({
   
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 2 }}>
-      <Typography variant="h4" sx={{ mb: 2, fontWeight: 'bold' }}>
-        {sessionName}
+      <Typography 
+        variant="h4" 
+        sx={{ 
+          mb: 2, 
+          fontWeight: 'bold', 
+          textAlign: 'center',
+          color: inactive ? 'text.disabled' : 'text.primary' 
+        }}
+      >
+        {sessionName || 'No Task Selected'}
       </Typography>
       
       {/* Timer with circular progress */}

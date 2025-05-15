@@ -54,15 +54,26 @@ const AddTaskModal = ({ open, onClose, onCreate }) => {
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Add New Task</DialogTitle>
-      <DialogContent>
+    <Dialog 
+      open={open} 
+      onClose={onClose} 
+      maxWidth="xs" 
+      fullWidth
+      PaperProps={{
+        sx: {
+          borderRadius: 3,
+          overflow: 'hidden'
+        }
+      }}
+    >
+      <DialogTitle sx={{ pb: 1 }}>Add New Task</DialogTitle>
+      <DialogContent sx={{ px: 3 }}>
         <TextField
           label="Write here"
           value={name}
           onChange={(e) => setName(e.target.value)}
           fullWidth
-          sx={{ mb: 2 }}
+          sx={{ mb: 2, mt: 1 }}
         />
         <Typography variant="subtitle2" sx={{ mb: 1 }}>
           Categories
@@ -108,8 +119,8 @@ const AddTaskModal = ({ open, onClose, onCreate }) => {
           valueLabelDisplay="auto"
         />
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+      <DialogActions sx={{ px: 3, py: 2 }}>
+        <Button onClick={onClose} color="inherit">Cancel</Button>
         <Button variant="contained" onClick={handleCreate}>
           Create
         </Button>

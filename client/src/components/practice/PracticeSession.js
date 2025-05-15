@@ -83,7 +83,12 @@ const PracticeSession = () => {
 
   // Add a new task
   const handleAddTask = (task) => {
-    dispatch(addTask(task));
+    // Create the task with the label property set to the task name
+    const newTask = {
+      ...task,
+      label: task.name // Ensure the label property is set from the name field
+    };
+    dispatch(addTask(newTask));
   };
 
   // Start timer for selected task
@@ -124,23 +129,42 @@ const PracticeSession = () => {
     if (webcamRef.current) {
       const imageSrc = webcamRef.current.getScreenshot();
       
+      // Get complete task information
+      const taskName = currentTask?.label || currentTask?.name || 'Untitled Task';
+      const taskCategory = currentTask?.category || 'general';
+      const taskPriority = currentTask?.priority || 'medium';
+      const timestamp = new Date().toISOString();
+      const formattedDate = new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
       // Save to local state for immediate display
       const newPhoto = {
         id: Date.now(),
         userId: user.id,
         image: imageSrc,
-        taskName: currentTask ? currentTask.label : 'Untitled Task',
-        timestamp: new Date().toISOString()
+        taskName: taskName,
+        taskCategory: taskCategory,
+        taskPriority: taskPriority,
+        timestamp: timestamp,
+        formattedDate: formattedDate
       };
       setCapturedPhotos(prev => [...prev, newPhoto]);
       
       // Save to Redux store for state management
       dispatch(setTaskImage(imageSrc));
       
-      // Save to server
+      // Save to server with complete task info
       dispatch(saveTaskPhoto({ 
         imageData: imageSrc, 
-        taskName: currentTask ? currentTask.label : 'Untitled Task'
+        taskName: taskName,
+        taskCategory: taskCategory,
+        taskPriority: taskPriority,
+        timestamp: timestamp
       }));
       
       // Complete the task and close the camera
@@ -161,7 +185,16 @@ const PracticeSession = () => {
       userId: photo.userId,
       image: `http://localhost:5000${photo.path}`,
       taskName: photo.taskName || 'Task',
-      timestamp: photo.createdAt
+      taskCategory: photo.taskCategory || 'general',
+      taskPriority: photo.taskPriority || 'medium',
+      timestamp: photo.createdAt,
+      formattedDate: photo.createdAt ? new Date(photo.createdAt).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }) : 'Unknown date'
     }))
   ];
 
@@ -635,8 +668,9 @@ const PracticeSession = () => {
                       <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
                         {photo.taskName}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {new Date(photo.timestamp).toLocaleDateString()}
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span>{photo.taskCategory} • {photo.taskPriority} priority</span>
+                        <span>{photo.formattedDate || new Date(photo.timestamp).toLocaleDateString()}</span>
                       </Typography>
                     </Box>
                   </ImageListItem>
