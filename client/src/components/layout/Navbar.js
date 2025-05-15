@@ -94,7 +94,7 @@ const Navbar = () => {
       <Container maxWidth="xl" disableGutters>
         <Toolbar sx={{ minHeight: 64, px: 3, display: 'flex', justifyContent: 'space-between' }}>
           {/* Left: Logo and Brand */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <Typography
               variant="h5"
               component={RouterLink}
@@ -111,6 +111,10 @@ const Navbar = () => {
             >
               SkillForge
             </Typography>
+          </Box>
+          
+          {/* Navigation Links - Centered */}
+          <Box sx={{ display: 'flex', flex: 1, justifyContent: 'center', alignItems: 'center' }}>
             {isAuthenticated && pages.map((page) => (
               <Button
                 key={page.name}
@@ -121,7 +125,7 @@ const Navbar = () => {
                   color: 'white',
                   fontWeight: 700,
                   fontSize: 16,
-                  mx: 0.5,
+                  mx: 1.5,
                   px: 1.5,
                   borderRadius: 2,
                   letterSpacing: 0.5,
@@ -135,9 +139,6 @@ const Navbar = () => {
               </Button>
             ))}
           </Box>
-
-          {/* Spacer */}
-          <Box sx={{ flexGrow: 1 }} />
 
           {/* Right: Auth Buttons or User Status Section */}
           {!isAuthenticated ? (
@@ -242,17 +243,20 @@ const Navbar = () => {
                   sx={{ bgcolor: '#fff', color: '#6d28d9', fontWeight: 700, fontSize: 13, borderRadius: 2, px: 0.5, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}
                 />
               )}
-              {/* User Name */}
-              <Typography variant="body2" sx={{ color: 'white', fontWeight: 700, fontSize: 16, mr: 1, textShadow: '0 1px 4px rgba(0,0,0,0.15)' }}>
-                {user?.username || 'User'}
-              </Typography>
-              {/* Avatar only (clickable for menu) */}
-              <Avatar
-                src={user?.avatar}
-                alt={user?.username}
-                sx={{ width: 36, height: 36, border: '2px solid #fbbf24', bgcolor: '#ede9fe', cursor: 'pointer' }}
-                onClick={handleMenu}
-              />
+              
+              {/* User Name and Avatar Group */}
+              <Box sx={{ display: 'flex', alignItems: 'center', ml: 0.5 }}>
+                <Typography variant="body2" sx={{ color: 'white', fontWeight: 700, fontSize: 16, mr: 0.5, textShadow: '0 1px 4px rgba(0,0,0,0.15)' }}>
+                  {user?.username || 'User'}
+                </Typography>
+                <Avatar
+                  src={user?.avatar}
+                  alt={user?.username}
+                  sx={{ width: 36, height: 36, border: '2px solid #fbbf24', bgcolor: '#ede9fe', cursor: 'pointer' }}
+                  onClick={handleMenu}
+                />
+              </Box>
+
               <Menu
                 anchorEl={anchorEl}
                 open={Boolean(anchorEl)}
