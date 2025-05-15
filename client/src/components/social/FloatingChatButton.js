@@ -290,18 +290,7 @@ const FloatingChatButton = () => {
                             >
                               {getLastMessageContent(friend._id)}
                             </Typography>
-                          ) : (
-                            <Typography
-                              variant="body2"
-                              sx={{
-                                color: 'text.disabled',
-                                fontStyle: 'italic',
-                                fontSize: '0.75rem'
-                              }}
-                            >
-                              No messages yet
-                            </Typography>
-                          )
+                          ) : null
                         }
                       />
                       {unreadCount > 0 && (
