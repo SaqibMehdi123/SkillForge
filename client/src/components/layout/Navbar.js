@@ -39,6 +39,7 @@ import {
   Settings as SettingsIcon,
   Refresh as RefreshIcon,
   Menu as MenuIcon,
+  Whatshot as WhatshotIcon,
 } from '@mui/icons-material';
 import { logout, loadUser } from '../../features/auth/authSlice';
 import { toggleTheme } from '../../features/theme/themeSlice';
@@ -226,9 +227,11 @@ const Navbar = () => {
                       sx={{
                         height: 22,
                         borderRadius: 5,
-                        background: '#ede9fe',
+                        background: 'rgba(255, 255, 255, 0.2)',
+                        border: '1px solid rgba(255, 255, 255, 0.3)',
                         '& .MuiLinearProgress-bar': {
-                          backgroundColor: '#fbbf24', // gold
+                          background: 'linear-gradient(90deg, #06b6d4 0%, #3b82f6 100%)', // Cyan to blue gradient
+                          boxShadow: '0 0 8px rgba(59, 130, 246, 0.5)',
                         },
                       }}
                     />
@@ -268,6 +271,24 @@ const Navbar = () => {
                       '& .MuiChip-label': { px: 1 } 
                     }}
                   />
+                  
+                  {/* Streak Indicator */}
+                  <Tooltip title="Current Streak">
+                    <Chip
+                      icon={<WhatshotIcon sx={{ color: '#fff', fontSize: 16 }} />}
+                      label={user?.streaks?.current || 0}
+                      size="small"
+                      sx={{ 
+                        bgcolor: '#f97316', // Orange color for flames
+                        color: '#fff', 
+                        fontWeight: 700, 
+                        fontSize: 12, 
+                        borderRadius: 2,
+                        height: 22, 
+                        '& .MuiChip-label': { px: 1 } 
+                      }}
+                    />
+                  </Tooltip>
                 </Box>
               )}
               
@@ -306,9 +327,11 @@ const Navbar = () => {
                         sx={{
                           height: 18,
                           borderRadius: 5,
-                          background: '#ede9fe',
+                          background: 'rgba(255, 255, 255, 0.2)',
+                          border: '1px solid rgba(255, 255, 255, 0.3)',
                           '& .MuiLinearProgress-bar': {
-                            backgroundColor: '#fbbf24',
+                            background: 'linear-gradient(90deg, #06b6d4 0%, #3b82f6 100%)', // Cyan to blue gradient
+                            boxShadow: '0 0 8px rgba(59, 130, 246, 0.5)',
                           },
                         }}
                       />
@@ -321,9 +344,10 @@ const Navbar = () => {
                           right: 0, 
                           textAlign: 'center', 
                           lineHeight: '18px', 
-                          color: '#6d28d9', 
+                          color: '#fff', 
                           fontWeight: 600, 
                           fontSize: 9,
+                          textShadow: '0px 0px 2px rgba(0,0,0,0.5)',
                         }}
                       >
                         <span>XP: {user?.xp || 0}/{xpToNextLevel}</span>
@@ -335,6 +359,20 @@ const Navbar = () => {
                       size="small"
                       sx={{ 
                         bgcolor: '#a78bfa', 
+                        color: '#fff', 
+                        fontWeight: 700, 
+                        fontSize: 10, 
+                        borderRadius: 2,
+                        height: 18
+                      }}
+                    />
+                    {/* Mobile Streak Indicator */}
+                    <Chip
+                      icon={<WhatshotIcon sx={{ color: '#fff', fontSize: 14 }} />}
+                      label={user?.streaks?.current || 0}
+                      size="small"
+                      sx={{ 
+                        bgcolor: '#f97316',
                         color: '#fff', 
                         fontWeight: 700, 
                         fontSize: 10, 

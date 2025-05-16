@@ -19,9 +19,28 @@ import {
   Divider,
   Paper,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  Card,
+  CardContent,
+  Fab,
+  Tabs,
+  Tab,
+  Chip,
+  Badge,
+  Tooltip
 } from '@mui/material';
-import { CalendarToday, Assignment, Photo } from '@mui/icons-material';
+import { 
+  CalendarToday, 
+  Assignment, 
+  Photo, 
+  FileUpload, 
+  Add as AddIcon,
+  AccessTime,
+  ArrowUpward,
+  ArrowDownward,
+  Dashboard,
+  History 
+} from '@mui/icons-material';
 import CircularTimer from './CircularTimer';
 import AddTaskModal from './AddTaskModal';
 import Webcam from 'react-webcam';
@@ -35,8 +54,12 @@ import {
   stopTask,
   setTaskImage,
   getUserPhotos,
-  saveTaskPhoto
+  saveTaskPhoto,
+  savePracticeSession,
+  getUserPracticePhotos
 } from '../../features/practice/practiceSlice';
+import { updateUserStreak } from '../../features/auth/authSlice';
+import { setNavbarTitle } from '../../features/ui/uiSlice';
 
 function getCurrentWeek() {
   const today = new Date();
@@ -60,10 +83,15 @@ const PracticeSession = () => {
   const dispatch = useDispatch();
   const location = useLocation();
   const webcamRef = useRef(null);
+  const fileInputRef = useRef(null);
   const [addTaskOpen, setAddTaskOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [capturedPhotos, setCapturedPhotos] = useState([]);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadedImage, setUploadedImage] = useState(null);
+  const [uploadConfirmOpen, setUploadConfirmOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState(0);
   const week = getCurrentWeek();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -75,6 +103,7 @@ const PracticeSession = () => {
   const user = useSelector((state) => state.auth.user);
   const themeMode = useSelector((state) => state.theme.mode);
   const serverPhotos = useSelector((state) => state.practice.photos);
+  const practicePhotos = useSelector((state) => state.practice.practicePhotos);
 
   const sessionIndex = currentTask ? tasks.findIndex(t => t.id === currentTask.id) + 1 : 1;
   const totalSessions = tasks.length;
@@ -96,6 +125,7 @@ const PracticeSession = () => {
   // Load photos from server on component mount
   useEffect(() => {
     dispatch(getUserPhotos());
+    dispatch(getUserPracticePhotos()); // Also load practice photos
   }, [dispatch]);
 
   // Add a new task
@@ -174,7 +204,26 @@ const PracticeSession = () => {
       // Save to Redux store for state management
       dispatch(setTaskImage(imageSrc));
       
-      // Save to server with complete task info
+      // Save practice session data and get the session ID
+      if (currentTask) {
+        dispatch(savePracticeSession({
+          ...currentTask,
+          image: imageSrc
+        }))
+          .then((result) => {
+            // After session is saved, save the photo with the session ID
+            if (result.payload && result.payload.session && result.payload.session._id) {
+              // Save to server with complete task info and session ID
+              dispatch(saveTaskPhoto({ 
+                imageData: imageSrc, 
+                taskName: taskName,
+                taskCategory: taskCategory,
+                taskPriority: taskPriority,
+                timestamp: timestamp,
+                sessionId: result.payload.session._id // Link photo to session
+              }));
+            } else {
+              // Fallback if no session ID is returned
       dispatch(saveTaskPhoto({ 
         imageData: imageSrc, 
         taskName: taskName,
@@ -182,10 +231,144 @@ const PracticeSession = () => {
         taskPriority: taskPriority,
         timestamp: timestamp
       }));
+            }
       
       // Complete the task and close the camera
+            dispatch(completeTask());
+            setCameraOpen(false);
+          });
+      } else {
+        // If no current task, just save the photo without session ID
+        dispatch(saveTaskPhoto({ 
+          imageData: imageSrc, 
+          taskName: taskName,
+          taskCategory: taskCategory,
+          taskPriority: taskPriority,
+          timestamp: timestamp
+        }));
       dispatch(completeTask());
       setCameraOpen(false);
+      }
+    }
+  };
+
+  // Open the file upload dialog
+  const openUpload = () => {
+    // Directly open the file picker dialog
+    fileInputRef.current.click();
+  };
+  
+  // Handle file selection for upload
+  const handleUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    // Read the image file as data URL
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const imageData = reader.result;
+      // Store the image temporarily and show confirmation dialog
+      setUploadedImage({
+        file,
+        imageData,
+        fileName: file.name
+      });
+      setUploadConfirmOpen(true);
+    };
+    
+    reader.readAsDataURL(file);
+  };
+
+  // Handle confirming the upload
+  const confirmUpload = () => {
+    if (!uploadedImage) return;
+    
+    const imageData = uploadedImage.imageData;
+      
+      // Get complete task information (same as in handleCapture)
+      const taskName = currentTask?.label || currentTask?.name || 'Untitled Task';
+      const taskCategory = currentTask?.category || 'general';
+      const taskPriority = currentTask?.priority || 'medium';
+      const timestamp = new Date().toISOString();
+      const formattedDate = new Date().toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+      
+      // Save to local state for immediate display
+      const newPhoto = {
+        id: Date.now(),
+        userId: user.id,
+        image: imageData,
+        taskName: taskName,
+        taskCategory: taskCategory,
+        taskPriority: taskPriority,
+        timestamp: timestamp,
+        formattedDate: formattedDate
+      };
+      setCapturedPhotos(prev => [...prev, newPhoto]);
+      
+      // Save to Redux store for state management
+      dispatch(setTaskImage(imageData));
+      
+    // Save practice session data and get the session ID
+    if (currentTask) {
+      dispatch(savePracticeSession({
+        ...currentTask,
+        image: imageData
+      }))
+        .then((result) => {
+          // After session is saved, save the photo with the session ID
+          if (result.payload && result.payload.session && result.payload.session._id) {
+            // Save to server with complete task info and session ID
+            dispatch(saveTaskPhoto({ 
+              imageData: imageData, 
+              taskName: taskName,
+              taskCategory: taskCategory,
+              taskPriority: taskPriority,
+              timestamp: timestamp,
+              sessionId: result.payload.session._id // Link photo to session
+            }));
+          } else {
+            // Fallback if no session ID is returned
+      dispatch(saveTaskPhoto({ 
+        imageData: imageData, 
+        taskName: taskName,
+        taskCategory: taskCategory,
+        taskPriority: taskPriority,
+        timestamp: timestamp
+      }));
+          }
+      
+          // Complete the task and show gallery
+      dispatch(completeTask());
+          setUploadConfirmOpen(false); // Close confirmation
+          setGalleryOpen(true); // Show gallery so user can see the uploaded image
+        });
+    } else {
+      // If no current task, just save the photo without session ID
+      dispatch(saveTaskPhoto({ 
+        imageData: imageData, 
+        taskName: taskName,
+        taskCategory: taskCategory,
+        taskPriority: taskPriority,
+        timestamp: timestamp
+      }))
+      .then(() => {
+        dispatch(completeTask());
+        setUploadConfirmOpen(false); // Close confirmation
+        setGalleryOpen(true); // Show gallery so user can see the uploaded image
+      });
+    }
+    
+    // Clean up
+    setUploadedImage(null);
+    // Reset the file input - using fileInputRef instead of event
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   };
 
@@ -194,9 +377,12 @@ const PracticeSession = () => {
   };
 
   // Combine local photos with server photos for display
-  const userPhotos = [
-    ...capturedPhotos.filter(photo => photo.userId === user.id),
-    ...serverPhotos.map(photo => ({
+  const userPhotos = (() => {
+    // Step 1: Start with local photos (captured in this session)
+    let combinedPhotos = capturedPhotos.filter(photo => photo.userId === user.id);
+    
+    // Step 2: Add server photos with full URLs
+    const serverPhotosList = serverPhotos.map(photo => ({
       id: photo.id,
       userId: photo.userId,
       image: `http://localhost:5000${photo.path}`,
@@ -210,9 +396,80 @@ const PracticeSession = () => {
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit'
-      }) : 'Unknown date'
-    }))
-  ];
+      }) : 'Unknown date',
+      path: photo.path // Store original path for deduplication
+    }));
+    
+    // Step 3: Add practice photos with URLs
+    const practicePhotosList = (practicePhotos || [])
+      .filter(photo => photo.image || photo.url || photo.path) // Only include photos with valid images
+      .map(photo => ({
+        id: photo.id || photo._id,
+        userId: photo.userId || user.id,
+        image: photo.url || (photo.path ? `http://localhost:5000${photo.path}` : photo.image),
+        taskName: photo.skillName || photo.taskName || 'Practice Task',
+        taskCategory: photo.category || 'practice',
+        taskPriority: photo.priority || 'medium',
+        timestamp: photo.date || photo.createdAt || photo.timestamp,
+        formattedDate: photo.date || photo.createdAt || photo.timestamp ? 
+          new Date(photo.date || photo.createdAt || photo.timestamp).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          }) : 'Unknown date',
+        path: photo.path || photo.url // Store original path for deduplication
+      }));
+    
+    // Step 4: Deduplicate photos by checking paths/URLs
+    // Track which photos we've already added
+    const photoPathMap = new Map();
+    const uniquePhotos = [];
+    
+    const addUniquePhoto = (photo) => {
+      // For data URLs, use a different approach
+      if (photo.image && photo.image.startsWith('data:')) {
+        // For data URLs, we don't have a reliable way to deduplicate,
+        // so add them all unless they're exact matches
+        if (!uniquePhotos.some(p => p.image === photo.image)) {
+          uniquePhotos.push(photo);
+        }
+        return;
+      }
+      
+      // Extract the filename for comparison
+      let imagePath = '';
+      if (photo.path) {
+        imagePath = photo.path;
+      } else if (photo.image) {
+        // Extract filename from URL or path
+        const parts = photo.image.split('/');
+        imagePath = parts[parts.length - 1];
+      }
+      
+      if (imagePath && !photoPathMap.has(imagePath)) {
+        photoPathMap.set(imagePath, true);
+        uniquePhotos.push(photo);
+      }
+    };
+    
+    // Process all photos
+    combinedPhotos.forEach(addUniquePhoto);
+    serverPhotosList.forEach(addUniquePhoto);
+    practicePhotosList.forEach(addUniquePhoto);
+    
+    // Sort by timestamp, newest first
+    return uniquePhotos.sort((a, b) => {
+      const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+      const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+      return timeB - timeA;
+    });
+  })();
+
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+  };
 
   return (
     <Box
@@ -222,71 +479,168 @@ const PracticeSession = () => {
           ? 'linear-gradient(135deg, #f5f7fa 0%, #e4e8ff 100%)' 
           : 'linear-gradient(135deg, #1a1f35 0%, #232946 100%)',
         transition: 'background 0.3s',
-        py: { xs: 1, sm: 2, md: 6 },
-        px: { xs: 0.5, sm: 1, md: 3 },
+        py: { xs: 2, sm: 3, md: 4 },
+        px: { xs: 1, sm: 2, md: 3 },
       }}
     >
       <Container maxWidth="xl">
         <Paper
-          elevation={6}
+          elevation={3}
           sx={{
-            borderRadius: { xs: 2, md: 4 },
+            borderRadius: 3,
             overflow: 'hidden',
             bgcolor: themeMode === 'light' ? 'rgba(255,255,255,0.9)' : 'rgba(35,41,70,0.9)',
           }}
         >
-          <Grid container>
-            <Grid item xs={12} md={11} lg={10} sx={{ mx: 'auto' }}>
+          {/* Dashboard Header */}
               <Box
                 sx={{
+              p: { xs: 2, sm: 3 },
+              background: themeMode === 'light' 
+                ? 'linear-gradient(90deg, #4776E6 0%, #8E54E9 100%)'
+                : 'linear-gradient(90deg, #3a4a7b 0%, #5d4a8a 100%)',
+              color: 'white',
                   display: 'flex',
-                  flexDirection: { xs: 'column', md: 'row' },
-                  alignItems: 'stretch',
+              flexDirection: { xs: 'column', sm: 'row' },
+              alignItems: { xs: 'flex-start', sm: 'center' },
                   justifyContent: 'space-between',
-                  minHeight: { xs: 'auto', md: '80vh' },
-                  position: 'relative',
-                  px: { xs: 1.5, sm: 2, md: 6 },
-                  py: { xs: 2, sm: 3, md: 5 },
-                }}
-              >
-                {/* Left Side: Calendar and Task List */}
-                <Box 
+              gap: 2,
+            }}
+          >
+            <Box>
+              <Typography variant="h5" fontWeight="bold">Practice Dashboard</Typography>
+              <Typography variant="body2" sx={{ opacity: 0.9, mt: 0.5 }}>
+                {currentTask 
+                  ? `Currently working on: ${currentTask.label || currentTask.name}`
+                  : 'Start a practice session to improve your skills'}
+              </Typography>
+            </Box>
+            
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Tooltip title="Gallery">
+                <Button 
+                  variant="contained" 
+                  color="secondary"
+                  startIcon={<Photo />}
+                  onClick={openGallery}
                   sx={{ 
-                    flex: { xs: '1 1 auto', md: 1 }, 
-                    pr: { md: 4 }, 
-                    mb: { xs: 4, md: 0 },
-                    borderRight: { md: 1 },
-                    borderColor: 'divider',
+                    bgcolor: 'rgba(255,255,255,0.2)', 
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' },
+                    backdropFilter: 'blur(4px)'
                   }}
                 >
-                  {/* Calendar Strip with better styling */}
-                  <Box sx={{ mb: { xs: 3, md: 4 } }}>
+                  Gallery
+                </Button>
+              </Tooltip>
+              
+              <Tooltip title="Add New Task">
+                <Button 
+                  variant="contained" 
+                  color="secondary"
+                  startIcon={<AddIcon />}
+                  onClick={() => setAddTaskOpen(true)}
+                  sx={{ 
+                    bgcolor: 'rgba(255,255,255,0.2)', 
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' },
+                    backdropFilter: 'blur(4px)'
+                  }}
+                >
+                  New Task
+                </Button>
+              </Tooltip>
+            </Box>
+          </Box>
+
+          {/* Tabs for navigation */}
+          <Tabs 
+            value={activeTab} 
+            onChange={handleTabChange}
+            variant="fullWidth"
+            sx={{ 
+              borderBottom: 1, 
+                    borderColor: 'divider',
+              bgcolor: themeMode === 'light' ? 'rgba(245,247,250,0.5)' : 'rgba(35,41,70,0.5)'
+            }}
+          >
+            <Tab 
+              icon={<Dashboard />} 
+              label="Dashboard" 
+              sx={{ textTransform: 'none', py: 1.5 }} 
+            />
+            <Tab 
+              icon={<Assignment />} 
+              label="Tasks" 
+              sx={{ textTransform: 'none', py: 1.5 }} 
+            />
+            <Tab 
+              icon={<History />} 
+              label="History" 
+              sx={{ textTransform: 'none', py: 1.5 }} 
+            />
+          </Tabs>
+
+          {/* Main Content Area */}
+          <Box sx={{ p: { xs: 2, sm: 3 } }}>
+            {activeTab === 0 && (
+              <Grid container spacing={3}>
+                {/* Timer Section */}
+                <Grid item xs={12} md={7} lg={8}>
+                  <Card elevation={2} sx={{ borderRadius: 2, height: '100%' }}>
+                    <CardContent sx={{ 
+                      p: { xs: 2, sm: 3 }, 
+                      height: '100%',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <CircularTimer
+                        isPlaying={currentTask?.isRunning}
+                        duration={currentTask ? currentTask.remaining : 1800}
+                        keyProp={currentTask ? currentTask.id : 'inactive'}
+                        onComplete={handleComplete}
+                        onStart={() => handleStart(currentTask?.id)}
+                        onStop={handlePause}
+                        onResume={handleResume}
+                        onReset={handleReset}
+                        onTimeUpdate={handleUpdateTime}
+                        sessionName={currentTask ? currentTask.label : 'No Task Selected'}
+                        sessionIndex={sessionIndex}
+                        totalSessions={totalSessions}
+                        showCamera={!!currentTask}
+                        onCapture={openCamera}
+                        onUpload={openUpload}
+                        progressColor={['#4caf50']}
+                        inactive={!currentTask}
+                        currentTask={currentTask} // Pass currentTask to CircularTimer
+                      />
+                    </CardContent>
+                  </Card>
+                </Grid>
+                
+                {/* Weekly Progress & Current Task Section */}
+                <Grid item xs={12} md={5} lg={4}>
+                  <Stack spacing={3} height="100%">
+                    {/* Weekly Calendar */}
+                    <Card elevation={2} sx={{ borderRadius: 2 }}>
+                      <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
                     <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
                       <CalendarToday fontSize="small" color="primary" />
-                      <Typography variant="h6">This Week</Typography>
+                          <Typography variant="h6" fontWeight="medium">This Week</Typography>
                     </Stack>
-                    <Paper 
-                      elevation={2}
-                      sx={{ 
-                        p: 1.5, 
-                        borderRadius: 2,
-                        bgcolor: themeMode === 'light' ? 'rgba(255,255,255,0.8)' : 'rgba(45,51,80,0.8)',
-                        width: '100%',
-                        overflowX: 'auto',
-                      }}
-                    >
+                        
                       <Stack 
                         direction="row" 
                         spacing={0.5} 
-                        justifyContent={{ xs: 'flex-start', sm: 'space-between' }}
-                        sx={{ overflowX: 'auto', pb: 1, minWidth: { xs: 340, sm: 'auto' } }}
+                          justifyContent="space-between"
+                          sx={{ overflow: 'auto', pb: 1 }}
                       >
                         {week.map((d) => (
                           <Box
                             key={d.day + d.date}
                             sx={{
-                              width: { xs: 38, sm: 42 },
-                              height: { xs: 54, sm: 60 },
+                                width: { xs: 40, sm: 48 },
+                                height: { xs: 56, sm: 64 },
                               flexShrink: 0,
                               display: 'flex',
                               flexDirection: 'column',
@@ -300,10 +654,11 @@ const PracticeSession = () => {
                               transition: 'all 0.2s',
                               '&:hover': {
                                 bgcolor: d.isToday ? 'primary.main' : 'action.hover',
+                                  transform: 'translateY(-2px)'
                               }
                             }}
                           >
-                            <Typography variant="body1" align="center" sx={{ fontWeight: 'bold' }}>
+                              <Typography variant="h6" align="center" sx={{ fontWeight: 'bold' }}>
                               {d.date}
                             </Typography>
                             <Typography variant="caption" align="center">
@@ -312,262 +667,602 @@ const PracticeSession = () => {
                           </Box>
                         ))}
                       </Stack>
-                    </Paper>
-                  </Box>
+                      </CardContent>
+                    </Card>
                   
-                  {/* Task List Panel */}
-                  <Box sx={{ width: '100%', mb: { xs: 3, md: 4 } }}>
+                    {/* Task Stats */}
+                    <Card elevation={2} sx={{ borderRadius: 2, flexGrow: 1 }}>
+                      <CardContent sx={{ p: { xs: 2, sm: 2.5 }, height: '100%' }}>
                     <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
                       <Assignment fontSize="small" color="primary" />
-                      <Typography variant="h6">Task List</Typography>
+                          <Typography variant="h6" fontWeight="medium">Task Progress</Typography>
                     </Stack>
                     
-                    <Paper 
-                      elevation={2}
+                        {currentTask ? (
+                          <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                            <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 1 }}>
+                              {currentTask.label || currentTask.name}
+                            </Typography>
+                            
+                            <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
+                              <Chip 
+                                label={currentTask.category || 'General'} 
+                                size="small" 
+                                color="primary" 
+                                variant="outlined"
+                              />
+                              <Chip 
+                                label={`${currentTask.priority || 'Medium'} Priority`} 
+                                size="small" 
+                                color={
+                                  currentTask.priority === 'high' ? 'error' :
+                                  currentTask.priority === 'medium' ? 'warning' : 'success'
+                                }
+                                variant="outlined"
+                              />
+                            </Box>
+                            
+                            <Box sx={{ mb: 1.5 }}>
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                                Progress
+                              </Typography>
+                              <LinearProgress
+                                variant="determinate"
+                                value={currentTask.progress || 0}
                       sx={{ 
-                        p: { xs: 1.5, sm: 2 }, 
-                        borderRadius: 2,
-                        bgcolor: themeMode === 'light' ? 'rgba(255,255,255,0.8)' : 'rgba(45,51,80,0.8)',
-                        maxHeight: { xs: 240, sm: 280, md: 340 },
-                        overflowY: 'auto'
-                      }}
-                    >
-                      {tasks.length === 0 && completedTasks.length === 0 && (
-                        <Typography color="text.secondary" sx={{ textAlign: 'center', py: 2 }}>
-                          No tasks yet. Add a task to get started!
+                                  height: 8, 
+                                  borderRadius: 1,
+                                  mb: 0.5
+                                }}
+                              />
+                              <Typography variant="caption" sx={{ display: 'block', textAlign: 'right' }}>
+                                {currentTask.progress || 0}% Complete
                         </Typography>
-                      )}
-                      
+                            </Box>
+                            
+                            <Divider sx={{ my: 1.5 }} />
+                            
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 'auto' }}>
+                              <Typography variant="body2" color="text.secondary">
+                                <AccessTime fontSize="small" sx={{ mr: 0.5, verticalAlign: 'text-bottom' }} />
+                                Duration:
+                              </Typography>
+                              <Typography variant="body2" fontWeight="medium">
+                                {Math.floor(currentTask.duration / 60)} minutes
+                              </Typography>
+                            </Box>
+                          </Box>
+                        ) : (
+                          <Box sx={{ 
+                            height: '100%', 
+                            display: 'flex', 
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            py: 3
+                          }}>
+                            <Typography color="text.secondary" align="center" sx={{ mb: 2 }}>
+                              No active task. Start a task to track progress.
+                            </Typography>
+                            <Button
+                              variant="outlined"
+                              color="primary"
+                              startIcon={<AddIcon />}
+                              onClick={() => setAddTaskOpen(true)}
+                            >
+                              Add New Task
+                            </Button>
+                          </Box>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Stack>
+                </Grid>
+              </Grid>
+            )}
+            
+            {activeTab === 1 && (
+              <Box>
+                <Grid container spacing={3}>
+                  {/* Pending Tasks Section */}
+                  <Grid item xs={12} md={6}>
+                    <Card elevation={2} sx={{ borderRadius: 2, height: '100%' }}>
+                      <CardContent sx={{ p: 2.5 }}>
+                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 3 }}>
+                          <ArrowUpward fontSize="small" color="primary" />
+                          <Typography variant="h6" fontWeight="medium">Pending Tasks</Typography>
+                          
+                          <Chip 
+                            label={tasks.length} 
+                            size="small" 
+                            color="primary" 
+                            sx={{ ml: 'auto' }} 
+                          />
+                        </Stack>
+                        
+                        {tasks.length === 0 ? (
+                          <Box sx={{ textAlign: 'center', py: 4 }}>
+                            <Typography color="text.secondary" sx={{ mb: 2 }}>
+                              No pending tasks. Add a task to get started!
+                            </Typography>
+                            <Button
+                              variant="outlined"
+                              color="primary"
+                              startIcon={<AddIcon />}
+                              onClick={() => setAddTaskOpen(true)}
+                            >
+                              Add New Task
+                            </Button>
+                          </Box>
+                        ) : (
+                          <Stack spacing={2} sx={{ 
+                            maxHeight: {xs: '300px', md: '500px'}, 
+                            overflowY: 'auto', 
+                            pr: 1,
+                            '&::-webkit-scrollbar': {
+                              width: '6px',
+                            },
+                            '&::-webkit-scrollbar-track': {
+                              background: 'rgba(0,0,0,0.05)',
+                              borderRadius: '10px',
+                            },
+                            '&::-webkit-scrollbar-thumb': {
+                              background: 'rgba(0,0,0,0.15)',
+                              borderRadius: '10px',
+                            },
+                          }}>
                       {tasks.map((task) => (
-                        <Paper 
+                              <Card 
                           key={task.id}
                           elevation={currentTask && currentTask.id === task.id ? 3 : 1}
                           sx={{ 
-                            mb: { xs: 1.5, sm: 2 }, 
-                            p: { xs: 1.5, sm: 2 }, 
+                                  p: 2, 
                             borderRadius: 2, 
-                            bgcolor: currentTask && currentTask.id === task.id 
-                              ? (themeMode === 'light' ? 'rgba(76, 175, 80, 0.1)' : 'rgba(76, 175, 80, 0.15)') 
-                              : (themeMode === 'light' ? 'white' : 'rgba(55,61,90,0.6)'), 
                             cursor: 'pointer',
-                            border: currentTask && currentTask.id === task.id ? '1px solid #4caf50' : 'none',
                             transition: 'all 0.2s ease',
-                            '&:hover': {
+                                  border: currentTask && currentTask.id === task.id ? '1px solid' : 'none',
+                                  borderColor: 'primary.main',
                               bgcolor: currentTask && currentTask.id === task.id 
-                                ? (themeMode === 'light' ? 'rgba(76, 175, 80, 0.15)' : 'rgba(76, 175, 80, 0.2)') 
-                                : (themeMode === 'light' ? 'rgba(0,0,0,0.02)' : 'rgba(65,71,100,0.7)'),
+                                    ? (themeMode === 'light' ? 'rgba(76, 175, 80, 0.05)' : 'rgba(76, 175, 80, 0.1)') 
+                                    : 'background.paper',
+                                  '&:hover': {
+                                    transform: 'translateY(-3px)',
+                                    boxShadow: 4
                             }
                           }} 
                           onClick={() => handleStart(task.id)}
                         >
-                          <Stack direction="row" alignItems="center" spacing={1.5}>
+                                <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
                             <Box 
                               sx={{ 
-                                width: { xs: 20, sm: 24 }, 
-                                height: { xs: 20, sm: 24 }, 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                justifyContent: 'center',
+                                      width: 16, 
+                                      height: 16, 
                                 borderRadius: '50%',
                                 border: '2px solid',
-                                borderColor: currentTask && currentTask.id === task.id 
-                                  ? 'primary.main' 
-                                  : 'text.secondary',
+                                      borderColor: 'primary.main',
+                                      mr: 1.5,
+                                      mt: 0.7,
                                 flexShrink: 0
-                              }}
-                            >
-                              {task.completed && (
-                                <Box 
-                                  sx={{ 
-                                    width: { xs: 10, sm: 12 }, 
-                                    height: { xs: 10, sm: 12 }, 
-                                    borderRadius: '50%', 
-                                    bgcolor: 'primary.main' 
-                                  }}
-                                />
-                              )}
-                            </Box>
-                            
-                            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                              <Typography variant="body1" noWrap>{task.label}</Typography>
-                              <Typography variant="caption" color="text.secondary" noWrap>
-                                {task.category} | {task.priority} priority
+                                    }}
+                                  />
+                                  
+                                  <Box sx={{ flexGrow: 1 }}>
+                                    <Typography variant="subtitle1" fontWeight="medium" sx={{ mb: 0.5 }}>
+                                      {task.label || task.name}
                               </Typography>
-                              <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                                    
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
+                                      <Chip 
+                                        label={task.category || 'General'} 
+                                        size="small" 
+                                        variant="outlined"
+                                        color="primary"
+                                        sx={{ height: 24 }}
+                                      />
+                                      <Chip 
+                                        label={`${task.priority || 'Medium'} Priority`} 
+                                        size="small" 
+                                        variant="outlined"
+                                        color={
+                                          task.priority === 'high' ? 'error' :
+                                          task.priority === 'medium' ? 'warning' : 'success'
+                                        }
+                                        sx={{ height: 24 }}
+                                      />
+                                      <Chip 
+                                        label={`${Math.floor(task.duration / 60)} min`} 
+                                        size="small" 
+                                        variant="outlined"
+                                        color="info"
+                                        icon={<AccessTime style={{fontSize: '0.875rem'}} />}
+                                        sx={{ height: 24 }}
+                                      />
+                                    </Box>
+                                    
+                                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
                                 <LinearProgress
                                   variant="determinate"
                                   value={task.progress || 0}
                                   sx={{ 
-                                    height: { xs: 6, sm: 8 }, 
-                                    borderRadius: 5, 
+                                          height: 6, 
+                                          borderRadius: 3, 
                                     width: '100%', 
                                     mr: 1,
-                                    '& .MuiLinearProgress-bar': {
-                                      backgroundColor: currentTask && currentTask.id === task.id 
-                                        ? 'primary.main' 
-                                        : '#9e9e9e',
-                                    }
-                                  }}
-                                />
-                                <Typography variant="caption" sx={{ minWidth: '40px', textAlign: 'right', fontWeight: 'bold' }}>
+                                          backgroundColor: themeMode === 'light' ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.08)',
+                                        }}
+                                      />
+                                      <Typography variant="caption" sx={{ minWidth: '36px', textAlign: 'right' }}>
                                   {task.progress || 0}%
                                 </Typography>
                               </Box>
                             </Box>
+                                </Box>
+                              </Card>
+                            ))}
                           </Stack>
-                        </Paper>
-                      ))}
-                      
-                      {/* Completed Tasks */}
-                      {completedTasks.length > 0 && (
-                        <Box sx={{ mt: 3, mb: 2 }}>
-                          <Divider sx={{ mb: 2 }}>
-                            <Typography variant="caption" color="text.secondary">COMPLETED</Typography>
-                          </Divider>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  
+                  {/* Completed Tasks Section */}
+                  <Grid item xs={12} md={6}>
+                    <Card elevation={2} sx={{ borderRadius: 2, height: '100%' }}>
+                      <CardContent sx={{ p: 2.5 }}>
+                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 3 }}>
+                          <ArrowDownward fontSize="small" color="success" />
+                          <Typography variant="h6" fontWeight="medium">Completed Tasks</Typography>
                           
+                          <Chip 
+                            label={completedTasks.length} 
+                            size="small" 
+                            color="success" 
+                            sx={{ ml: 'auto' }} 
+                          />
+                        </Stack>
+                        
+                        {completedTasks.length === 0 ? (
+                          <Box sx={{ textAlign: 'center', py: 4 }}>
+                            <Typography color="text.secondary">
+                              No completed tasks yet. Complete a task to see it here.
+                            </Typography>
+                          </Box>
+                        ) : (
+                          <Stack spacing={2} sx={{ 
+                            maxHeight: {xs: '300px', md: '500px'}, 
+                            overflowY: 'auto', 
+                            pr: 1,
+                            '&::-webkit-scrollbar': {
+                              width: '6px',
+                            },
+                            '&::-webkit-scrollbar-track': {
+                              background: 'rgba(0,0,0,0.05)',
+                              borderRadius: '10px',
+                            },
+                            '&::-webkit-scrollbar-thumb': {
+                              background: 'rgba(0,0,0,0.15)',
+                              borderRadius: '10px',
+                            },
+                          }}>
                           {completedTasks.map((task) => (
-                            <Paper
+                              <Card 
                               key={task.id}
                               elevation={0}
                               sx={{ 
-                                mb: { xs: 1.5, sm: 2 }, 
-                                p: { xs: 1.5, sm: 2 }, 
+                                  p: 2, 
                                 borderRadius: 2, 
-                                bgcolor: themeMode === 'light' ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.05)',
+                                  bgcolor: themeMode === 'light' ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.02)'
                               }}
                             >
-                              <Stack direction="row" alignItems="center" spacing={1.5}>
+                                <Box sx={{ display: 'flex', alignItems: 'flex-start' }}>
                                 <Box 
                                   sx={{ 
-                                    width: { xs: 20, sm: 24 }, 
-                                    height: { xs: 20, sm: 24 }, 
+                                      width: 16, 
+                                      height: 16, 
+                                      borderRadius: '50%',
+                                      border: '2px solid',
+                                      borderColor: 'success.main',
+                                      mr: 1.5,
+                                      mt: 0.7,
+                                      flexShrink: 0,
                                     display: 'flex', 
                                     alignItems: 'center', 
-                                    justifyContent: 'center',
-                                    borderRadius: '50%',
-                                    border: '2px solid #9e9e9e',
-                                    flexShrink: 0
+                                      justifyContent: 'center'
                                   }}
                                 >
                                   <Box 
                                     sx={{ 
-                                      width: { xs: 10, sm: 12 }, 
-                                      height: { xs: 10, sm: 12 }, 
+                                        width: 8, 
+                                        height: 8,
                                       borderRadius: '50%', 
-                                      bgcolor: '#9e9e9e' 
+                                        bgcolor: 'success.main'
                                     }}
                                   />
                                 </Box>
                                 
-                                <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                                  <Typography variant="body1" sx={{ textDecoration: 'line-through', color: 'text.secondary' }} noWrap>
-                                    {task.label}
+                                  <Box sx={{ flexGrow: 1 }}>
+                                    <Typography 
+                                      variant="subtitle1" 
+                                      fontWeight="medium" 
+                                      sx={{ 
+                                        mb: 0.5,
+                                        color: 'text.secondary',
+                                        textDecoration: 'line-through'
+                                      }}
+                                    >
+                                      {task.label || task.name}
                                   </Typography>
-                                  <Typography variant="caption" color="text.secondary" noWrap>
-                                    {task.category} | {task.priority} priority
-                                  </Typography>
-                                  <Box sx={{ display: 'flex', alignItems: 'center', mt: 1 }}>
+                                    
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
+                                      <Chip 
+                                        label={task.category || 'General'} 
+                                        size="small" 
+                                        variant="outlined"
+                                        sx={{ 
+                                          height: 24,
+                                          opacity: 0.7,
+                                          '& .MuiChip-label': { color: 'text.secondary' }
+                                        }}
+                                      />
+                                      <Chip 
+                                        label={`${task.priority || 'Medium'} Priority`} 
+                                        size="small" 
+                                        variant="outlined"
+                                        sx={{ 
+                                          height: 24,
+                                          opacity: 0.7,
+                                          '& .MuiChip-label': { color: 'text.secondary' }
+                                        }}
+                                      />
+                                      <Chip 
+                                        label={`${Math.floor(task.duration / 60)} min`} 
+                                        size="small" 
+                                        variant="outlined"
+                                        icon={<AccessTime style={{fontSize: '0.875rem'}} />}
+                                        sx={{ 
+                                          height: 24,
+                                          opacity: 0.7,
+                                          '& .MuiChip-label': { color: 'text.secondary' }
+                                        }}
+                                      />
+                                    </Box>
+                                    
+                                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
                                     <LinearProgress
                                       variant="determinate"
                                       value={100}
                                       sx={{ 
-                                        height: { xs: 6, sm: 8 }, 
-                                        borderRadius: 5, 
+                                          height: 6, 
+                                          borderRadius: 3, 
                                         width: '100%', 
                                         mr: 1, 
-                                        opacity: 0.6,
                                         '& .MuiLinearProgress-bar': {
-                                          backgroundColor: '#9e9e9e',
+                                            backgroundColor: 'success.main'
                                         }
                                       }}
                                     />
-                                    <Typography variant="caption" sx={{ minWidth: '40px', textAlign: 'right' }}>
+                                      <Typography variant="caption" sx={{ minWidth: '36px', textAlign: 'right' }}>
                                       100%
                                     </Typography>
                                   </Box>
                                 </Box>
-                              </Stack>
-                            </Paper>
-                          ))}
+                                </Box>
+                              </Card>
+                            ))}
+                          </Stack>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                </Grid>
                         </Box>
                       )}
                       
-                      <Stack 
-                        direction={{ xs: 'column', sm: 'row' }} 
-                        spacing={{ xs: 1, sm: 2 }} 
-                        sx={{ mt: 3 }}
-                      >
+            {activeTab === 2 && (
+              <Box>
+                <Grid container spacing={3}>
+                  {/* Stats Overview */}
+                  <Grid item xs={12}>
+                    <Card elevation={2} sx={{ borderRadius: 2 }}>
+                      <CardContent sx={{ p: 2.5 }}>
+                        <Typography variant="h6" fontWeight="medium" sx={{ mb: 2 }}>
+                          Your Practice Stats
+                        </Typography>
+                        
+                        <Grid container spacing={3}>
+                          <Grid item xs={6} md={3}>
+                            <Box sx={{ 
+                              p: 2, 
+                              textAlign: 'center',
+                              bgcolor: themeMode === 'light' ? 'rgba(76, 175, 80, 0.08)' : 'rgba(76, 175, 80, 0.15)',
+                              borderRadius: 2
+                            }}>
+                              <Typography variant="h4" fontWeight="bold" color="success.main" sx={{ mb: 1 }}>
+                                {completedTasks.length}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Sessions Completed
+                              </Typography>
+                            </Box>
+                          </Grid>
+                          
+                          <Grid item xs={6} md={3}>
+                            <Box sx={{ 
+                              p: 2, 
+                              textAlign: 'center',
+                              bgcolor: themeMode === 'light' ? 'rgba(33, 150, 243, 0.08)' : 'rgba(33, 150, 243, 0.15)',
+                              borderRadius: 2
+                            }}>
+                              <Typography variant="h4" fontWeight="bold" color="primary.main" sx={{ mb: 1 }}>
+                                {userPhotos.length}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Practice Works
+                              </Typography>
+                            </Box>
+                          </Grid>
+                          
+                          <Grid item xs={6} md={3}>
+                            <Box sx={{ 
+                              p: 2, 
+                              textAlign: 'center',
+                              bgcolor: themeMode === 'light' ? 'rgba(255, 152, 0, 0.08)' : 'rgba(255, 152, 0, 0.15)',
+                              borderRadius: 2
+                            }}>
+                              <Typography variant="h4" fontWeight="bold" color="warning.main" sx={{ mb: 1 }}>
+                                {completedTasks.reduce((total, task) => total + Math.floor(task.duration / 60), 0)}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Minutes Practiced
+                              </Typography>
+                            </Box>
+                          </Grid>
+                          
+                          <Grid item xs={6} md={3}>
+                            <Box sx={{ 
+                              p: 2, 
+                              textAlign: 'center',
+                              bgcolor: themeMode === 'light' ? 'rgba(156, 39, 176, 0.08)' : 'rgba(156, 39, 176, 0.15)',
+                              borderRadius: 2
+                            }}>
+                              <Typography variant="h4" fontWeight="bold" sx={{ 
+                                mb: 1,
+                                background: 'linear-gradient(45deg, #9c27b0 30%, #f06292 90%)',
+                                WebkitBackgroundClip: 'text',
+                                WebkitTextFillColor: 'transparent',
+                                backgroundClip: 'text', 
+                              }}>
+                                {tasks.length}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Upcoming Sessions
+                              </Typography>
+                            </Box>
+                          </Grid>
+                        </Grid>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  
+                  {/* Gallery Section */}
+                  <Grid item xs={12}>
+                    <Card elevation={2} sx={{ borderRadius: 2 }}>
+                      <CardContent sx={{ p: 2.5 }}>
+                        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 3 }}>
+                          <Photo fontSize="small" color="primary" />
+                          <Typography variant="h6" fontWeight="medium">Your Gallery</Typography>
+                          
                         <Button
-                          variant="contained"
-                          color="primary"
-                          fullWidth
+                            variant="outlined" 
+                            size="small" 
+                            sx={{ ml: 'auto' }}
+                            onClick={openGallery}
+                          >
+                            View All
+                          </Button>
+                        </Stack>
+                        
+                        {userPhotos.length === 0 ? (
+                          <Box sx={{ textAlign: 'center', py: 4 }}>
+                            <Typography color="text.secondary" sx={{ mb: 2 }}>
+                              No practice photos yet. Complete sessions to build your gallery!
+                            </Typography>
+                          </Box>
+                        ) : (
+                          <ImageList 
+                            cols={isMobile ? 2 : (isSm ? 3 : 4)} 
+                            gap={12}
+                            sx={{ overflow: 'visible' }}
+                          >
+                            {userPhotos.slice(0, 8).map((photo) => (
+                              <ImageListItem 
+                                key={photo.id}
                           sx={{ 
-                            py: { xs: 1, sm: 1.5 }, 
                             borderRadius: 2,
-                            fontWeight: 'bold',
+                                  overflow: 'hidden',
                             boxShadow: 2,
-                          }}
-                          onClick={() => setAddTaskOpen(true)}
-                        >
-                          Add a Task
-                        </Button>
-                        <Button
-                          variant="outlined"
-                          color="secondary"
-                          fullWidth
+                                  transition: 'all 0.2s',
+                                  '&:hover': {
+                                    transform: 'scale(1.03)',
+                                    boxShadow: 4,
+                                  }
+                                }}
+                              >
+                                <img 
+                                  src={photo.image} 
+                                  alt={photo.taskName} 
+                                  loading="lazy"
+                                  style={{ aspectRatio: '3/2', objectFit: 'cover' }}
+                                />
+                                <Box 
                           sx={{ 
-                            py: { xs: 1, sm: 1.5 }, 
-                            borderRadius: 2,
-                            fontWeight: 'bold',
-                          }}
-                          onClick={openGallery}
-                          startIcon={<Photo />}
-                        >
-                          Gallery
-                        </Button>
-                      </Stack>
-                    </Paper>
-                  </Box>
-                </Box>
-                
-                {/* Right Side: Timer */}
-                <Box 
+                                    p: 1.5, 
+                                    bgcolor: themeMode === 'light' ? 'rgba(255,255,255,0.8)' : 'rgba(0,0,0,0.7)',
+                                    position: 'absolute',
+                                    bottom: 0,
+                                    left: 0,
+                                    right: 0,
+                                    backdropFilter: 'blur(4px)',
+                                  }}
+                                >
+                                  <Typography variant="body2" sx={{ fontWeight: 'bold' }} noWrap>
+                                    {photo.taskName}
+                                  </Typography>
+                                  <Typography 
+                                    variant="caption" 
+                                    color="text.secondary" 
                   sx={{ 
-                    flex: { xs: '1 1 auto', md: 1 }, 
                     display: 'flex', 
-                    flexDirection: 'column', 
                     alignItems: 'center', 
-                    justifyContent: 'center',
-                    pl: { md: 4 },
-                    pt: { xs: 2, md: 0 },
-                    mt: { xs: 2, md: 0 },
-                    borderTop: { xs: '1px solid', md: 'none' },
-                    borderColor: 'divider',
-                  }}
-                >
-                  <CircularTimer
-                    isPlaying={currentTask?.isRunning}
-                    duration={currentTask ? currentTask.remaining : 1800}
-                    keyProp={currentTask ? currentTask.id : 'inactive'}
-                    onComplete={handleComplete}
-                    onStart={() => handleStart(currentTask?.id)}
-                    onStop={handlePause}
-                    onResume={handleResume}
-                    onReset={handleReset}
-                    onTimeUpdate={handleUpdateTime}
-                    sessionName={currentTask ? currentTask.label : 'No Task Selected'}
-                    sessionIndex={sessionIndex}
-                    totalSessions={totalSessions}
-                    showCamera={!!currentTask}
-                    onCapture={openCamera}
-                    progressColor={['#4caf50']}
-                    inactive={!currentTask}
-                  />
+                                      justifyContent: 'space-between', 
+                                      flexWrap: 'wrap'
+                                    }}
+                                  >
+                                    <span>{photo.taskCategory}</span>
+                                    <span>{photo.formattedDate}</span>
+                                  </Typography>
                 </Box>
+                              </ImageListItem>
+                            ))}
+                          </ImageList>
+                        )}
+                        
+                        {userPhotos.length > 8 && (
+                          <Box sx={{ textAlign: 'center', mt: 3 }}>
+                            <Button 
+                              variant="outlined" 
+                              onClick={openGallery}
+                              endIcon={<ArrowDownward />}
+                            >
+                              Show More
+                            </Button>
               </Box>
+                        )}
+                      </CardContent>
+                    </Card>
             </Grid>
           </Grid>
+              </Box>
+            )}
+          </Box>
         </Paper>
+        
+        {/* Mobile action button */}
+        {isMobile && (
+          <Fab 
+            color="primary" 
+            aria-label="add task" 
+            onClick={() => setAddTaskOpen(true)}
+            sx={{ 
+              position: 'fixed', 
+              bottom: 24, 
+              right: 24,
+              boxShadow: '0 8px 16px rgba(85, 105, 255, 0.3)'
+            }}
+          >
+            <AddIcon />
+          </Fab>
+        )}
         
         {/* Add Task Modal */}
         <AddTaskModal open={addTaskOpen} onClose={() => setAddTaskOpen(false)} onCreate={handleAddTask} />
@@ -706,6 +1401,124 @@ const PracticeSession = () => {
             </Button>
           </DialogActions>
         </Dialog>
+        
+        {/* Upload Confirmation Modal */}
+        <Dialog 
+          open={uploadConfirmOpen} 
+          onClose={() => setUploadConfirmOpen(false)} 
+          maxWidth="sm" 
+          fullWidth
+          PaperProps={{
+            sx: { 
+              borderRadius: { xs: 2, sm: 3 },
+              boxShadow: 24,
+              bgcolor: themeMode === 'light' ? 'white' : '#1e2235',
+              m: { xs: 1, sm: 2 },
+              width: { xs: 'calc(100% - 16px)', sm: 'auto' }
+            }
+          }}
+        >
+          <DialogTitle sx={{ fontWeight: 'bold', pb: 1 }}>
+            Confirm Upload
+          </DialogTitle>
+          
+          <DialogContent dividers>
+            <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <Typography variant="body1" sx={{ mb: 2, fontWeight: 'medium' }}>
+                Would you like to save this image to your practice gallery?
+              </Typography>
+              
+              {uploadedImage?.imageData && (
+                <Box sx={{ 
+                  width: '100%', 
+                  maxWidth: 350, 
+                  mb: 2,
+                  mx: 'auto',
+                  borderRadius: 2,
+                  overflow: 'hidden',
+                  boxShadow: 3,
+                }}>
+                  <img 
+                    src={uploadedImage.imageData} 
+                    alt="Preview" 
+                    style={{ 
+                      width: '100%', 
+                      height: 'auto', 
+                      objectFit: 'contain',
+                      display: 'block',
+                      maxHeight: '350px'
+                    }} 
+                  />
+                </Box>
+              )}
+              
+              <Typography variant="caption" color="text.secondary">
+                {uploadedImage?.fileName || "Selected image"}
+              </Typography>
+            </Box>
+          </DialogContent>
+          
+          <DialogActions sx={{ p: { xs: 1.5, sm: 2 }, justifyContent: 'space-between' }}>
+            <Button 
+              onClick={() => {
+                setUploadedImage(null);
+                setUploadConfirmOpen(false);
+              }}
+              variant="outlined"
+              sx={{ borderRadius: 2, px: { xs: 2, sm: 3 } }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={confirmUpload} 
+              variant="contained" 
+              color="success"
+              sx={{ borderRadius: 2, px: { xs: 2, sm: 3 }, fontWeight: 'bold' }}
+            >
+              Save to Gallery
+            </Button>
+          </DialogActions>
+        </Dialog>
+        
+        {/* Hidden file input for uploading images */}
+        <input
+          type="file"
+          accept="image/*"
+          ref={fileInputRef}
+          style={{ display: 'none' }}
+          onChange={handleUpload}
+          onClick={(e) => {
+            // Reset the file input value to ensure onChange fires even if selecting the same file
+            e.target.value = '';
+          }}
+        />
+
+        {/* Footer Content - always visible */}
+        <Box sx={{ 
+          mt: 'auto', 
+          pt: 2, 
+          display: 'flex', 
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 1
+        }}>
+          {/* Debug button for streak testing */}
+          {process.env.NODE_ENV !== 'production' && (
+            <Button 
+              variant="outlined" 
+              size="small"
+              onClick={() => {
+                dispatch(updateUserStreak()).then(result => {
+                  console.log("Streak update result:", result);
+                  alert(`Streak updated to: ${result.payload.current}`);
+                });
+              }}
+              sx={{ mb: 2 }}
+            >
+              Test Streak Update
+            </Button>
+          )}
+        </Box>
       </Container>
     </Box>
   );

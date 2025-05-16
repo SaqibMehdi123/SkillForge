@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 const practiceSessionSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   skill: { type: String, required: true },
+  category: { type: String, default: 'general' },
+  priority: { type: String, default: 'medium' },
   duration: { type: Number, required: true }, // in minutes
   completed: { type: Boolean, default: false },
   photo: { type: String }, // file path

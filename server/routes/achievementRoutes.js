@@ -5,5 +5,6 @@ const auth = require('../middleware/auth');
 
 router.get('/me', auth, achievementController.getMyAchievements);
 router.post('/', auth, achievementController.addAchievement);
+router.post('/check-streak', auth, achievementController.checkStreakAchievements);
 
 module.exports = router; 

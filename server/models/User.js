@@ -12,6 +12,11 @@ const userSchema = new mongoose.Schema({
   badges: [{ type: String }],
   friends: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   streak: { type: Number, default: 0 },
+  streaks: {
+    current: { type: Number, default: 0 },
+    best: { type: Number, default: 0 },
+    lastUpdate: { type: Date }
+  },
   redemptionTokens: { type: Number, default: 0 },
   privacy: {
     profile: { type: String, enum: ['public', 'friends', 'private'], default: 'public' },

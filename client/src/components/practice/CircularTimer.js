@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Box, Typography, Button, Stack, CircularProgress, keyframes, useMediaQuery, useTheme } from '@mui/material';
-import { PlayArrow, Pause, Replay, PhotoCamera } from '@mui/icons-material';
+import { PlayArrow, Pause, Replay, PhotoCamera, Upload } from '@mui/icons-material';
 import { styled } from '@mui/material/styles';
 
 // Define keyframes for more impressive animations
@@ -226,6 +226,89 @@ const ButtonStyled = styled(Button)(({ theme, glowing }) => ({
   }),
 }));
 
+// Add button styling
+const ActionButtonStyled = styled(Button)(({ theme, type }) => ({
+  transition: 'all 0.3s ease',
+  position: 'relative',
+  overflow: 'hidden',
+  boxShadow: type === 'capture' 
+    ? '0 0 15px rgba(76, 175, 80, 0.3)'
+    : '0 0 15px rgba(33, 150, 243, 0.3)',
+  '&:hover': {
+    transform: 'translateY(-2px)',
+    boxShadow: type === 'capture' 
+      ? '0 5px 15px rgba(76, 175, 80, 0.5)'
+      : '0 5px 15px rgba(33, 150, 243, 0.5)',
+  },
+  '&:active': {
+    transform: 'translateY(0)',
+  },
+}));
+
+// Create a worker code as a blob
+const createWorkerBlob = () => {
+  const workerCode = `
+    let timerId = null;
+    let targetEndTime = null;
+    
+    self.onmessage = function(e) {
+      const { command, remainingTime } = e.data;
+      
+      if (command === 'start') {
+        // Clear any existing timer
+        if (timerId) {
+          clearInterval(timerId);
+        }
+        
+        // Set the target end time
+        targetEndTime = Date.now() + (remainingTime * 1000);
+        
+        // Start a periodic timer to report back remaining time
+        timerId = setInterval(() => {
+          const now = Date.now();
+          const msRemaining = Math.max(0, targetEndTime - now);
+          const secondsRemaining = Math.ceil(msRemaining / 1000);
+          
+          // Send the current time back to the main thread
+          self.postMessage({ 
+            type: 'tick', 
+            secondsRemaining,
+            completed: msRemaining <= 50
+          });
+          
+          // Stop if timer completed
+          if (msRemaining <= 50) {
+            clearInterval(timerId);
+            timerId = null;
+          }
+        }, 100);
+      } 
+      else if (command === 'stop') {
+        if (timerId) {
+          clearInterval(timerId);
+          timerId = null;
+        }
+      }
+      else if (command === 'sync') {
+        // Just check and report current time without restarting
+        if (targetEndTime) {
+          const now = Date.now();
+          const msRemaining = Math.max(0, targetEndTime - now);
+          const secondsRemaining = Math.ceil(msRemaining / 1000);
+          
+          self.postMessage({ 
+            type: 'sync', 
+            secondsRemaining,
+            completed: msRemaining <= 50
+          });
+        }
+      }
+    };
+  `;
+  
+  return URL.createObjectURL(new Blob([workerCode], { type: 'application/javascript' }));
+};
+
 const CircularTimer = ({
   isPlaying,
   duration,
@@ -241,12 +324,19 @@ const CircularTimer = ({
   totalSessions,
   showCamera,
   onCapture,
+  onUpload,
   progressColor = '#4caf50',
   inactive,
+  currentTask, // Add currentTask as a prop
 }) => {
   // State to track remaining time
   const [remainingTime, setRemainingTime] = useState(duration);
   const [timerCompleted, setTimerCompleted] = useState(false);
+  
+  // Refs for the worker
+  const workerRef = useRef(null);
+  const workerBlobURLRef = useRef(null);
+  
   const theme = useTheme();
   const isXs = useMediaQuery(theme.breakpoints.down('sm'));
   const isSm = useMediaQuery(theme.breakpoints.between('sm', 'md'));
@@ -260,56 +350,162 @@ const CircularTimer = ({
   const dotsTransform = isXs ? -88 : isSm ? -103 : -118;
   const fontSize = isXs ? '2.25rem' : isSm ? '2.75rem' : '3rem';
   
+  // Store timing information in localStorage to prevent timer reset on page navigation
+  useEffect(() => {
+    if (currentTask && currentTask.id) {
+      const timerKey = `timer_${currentTask.id}`;
+      
+      // When the timer changes, save it to localStorage
+      if (isPlaying) {
+        localStorage.setItem(timerKey, JSON.stringify({
+          endTime: Date.now() + (remainingTime * 1000),
+          isRunning: isPlaying,
+          completed: timerCompleted
+        }));
+      } else if (!isPlaying) {
+        localStorage.setItem(timerKey, JSON.stringify({
+          remainingTime: remainingTime,
+          isRunning: false,
+          completed: timerCompleted
+        }));
+      }
+    }
+  }, [remainingTime, isPlaying, timerCompleted, currentTask]);
+  
+  // Initialize the worker
+  useEffect(() => {
+    // Create the worker blob URL
+    workerBlobURLRef.current = createWorkerBlob();
+    // Create the worker
+    workerRef.current = new Worker(workerBlobURLRef.current);
+    
+    // Set up message handler
+    workerRef.current.onmessage = (e) => {
+      const { type, secondsRemaining, completed } = e.data;
+      
+      if (completed) {
+        setRemainingTime(0);
+        setTimerCompleted(true);
+        
+        // Notify parent
+        if (onComplete) {
+          onComplete();
+        }
+        
+        if (onTimeUpdate) {
+          onTimeUpdate(0);
+        }
+      } else {
+        // Only update if changed
+        if (secondsRemaining !== remainingTime) {
+          setRemainingTime(secondsRemaining);
+          
+          // Notify parent about time update
+          if (onTimeUpdate) {
+            onTimeUpdate(secondsRemaining);
+          }
+        }
+      }
+    };
+    
+    // Restore timer state from localStorage if available
+    if (currentTask && currentTask.id) {
+      const timerKey = `timer_${currentTask.id}`;
+      const savedTimer = localStorage.getItem(timerKey);
+      
+      if (savedTimer) {
+        const timerData = JSON.parse(savedTimer);
+        
+        if (timerData.isRunning) {
+          // Calculate remaining time based on saved end time
+          const now = Date.now();
+          const endTime = timerData.endTime;
+          const remaining = Math.max(0, Math.floor((endTime - now) / 1000));
+          
+          if (remaining > 0) {
+            setRemainingTime(remaining);
+            if (onTimeUpdate) {
+              onTimeUpdate(remaining);
+            }
+          } else {
+            // Timer would have completed
+            setRemainingTime(0);
+            setTimerCompleted(true);
+            if (onComplete) {
+              onComplete();
+            }
+            if (onTimeUpdate) {
+              onTimeUpdate(0);
+            }
+          }
+        } else {
+          // Timer was paused
+          setRemainingTime(timerData.remainingTime);
+          setTimerCompleted(timerData.completed);
+          if (onTimeUpdate) {
+            onTimeUpdate(timerData.remainingTime);
+          }
+        }
+      }
+    }
+    
+    // Cleanup worker on unmount
+    return () => {
+      if (workerRef.current) {
+        workerRef.current.terminate();
+      }
+      
+      if (workerBlobURLRef.current) {
+        URL.revokeObjectURL(workerBlobURLRef.current);
+      }
+    };
+  }, []);
+  
   // Reset timer when duration or key changes
   useEffect(() => {
     setRemainingTime(duration);
     setTimerCompleted(false);
+    
+    // Stop any running timer
+    if (workerRef.current) {
+      workerRef.current.postMessage({ command: 'stop' });
+    }
   }, [duration, keyProp]);
   
-  // Timer logic
+  // Handle visibility change
   useEffect(() => {
-    let timerId = null;
-    
-    if (isPlaying && !inactive && !timerCompleted) {
-      timerId = setInterval(() => {
-        setRemainingTime(prev => {
-          // If time is up
-          if (prev <= 1) {
-            clearInterval(timerId);
-            setTimerCompleted(true);
-            
-            // Notify parent
-            if (onComplete) {
-              onComplete();
-            }
-            
-            // Notify parent about final time update
-            if (onTimeUpdate) {
-              onTimeUpdate(0);
-            }
-            
-            return 0;
-          }
-          
-          // Normal decrement
-          const newTime = prev - 1;
-          
-          // Notify parent about time update
-          if (onTimeUpdate) {
-            onTimeUpdate(newTime);
-          }
-          
-          return newTime;
-        });
-      }, 1000);
-    }
-    
-    return () => {
-      if (timerId) {
-        clearInterval(timerId);
+    const handleVisibilityChange = () => {
+      // When becoming visible again, sync the timer
+      if (document.visibilityState === 'visible' && isPlaying && !timerCompleted) {
+        if (workerRef.current) {
+          workerRef.current.postMessage({ command: 'sync' });
+        }
       }
     };
-  }, [isPlaying, inactive, timerCompleted, onComplete, onTimeUpdate]);
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isPlaying, timerCompleted]);
+  
+  // Main timer control effect
+  useEffect(() => {
+    if (isPlaying && !inactive && !timerCompleted) {
+      // Start the timer worker
+      if (workerRef.current) {
+        workerRef.current.postMessage({ 
+          command: 'start', 
+          remainingTime 
+        });
+      }
+    } else {
+      // Stop the timer worker
+      if (workerRef.current) {
+        workerRef.current.postMessage({ command: 'stop' });
+      }
+    }
+  }, [isPlaying, inactive, timerCompleted, remainingTime]);
   
   // Calculate progress percentage
   const progress = duration > 0 ? ((duration - remainingTime) / duration) * 100 : 0;
@@ -333,7 +529,7 @@ const CircularTimer = ({
     }
   }, [timerCompleted, duration, onStart]);
   
-  const handlePause = useCallback(() => {
+  const handleStop = useCallback(() => {
     if (onStop) {
       onStop();
     }
@@ -360,6 +556,12 @@ const CircularTimer = ({
     }
   }, [onCapture]);
 
+  const handleUpload = useCallback(() => {
+    if (onUpload) {
+      onUpload();
+    }
+  }, [onUpload]);
+
   const isActive = !inactive && (isPlaying || timerCompleted);
   
   // Create particles for active timer
@@ -382,6 +584,113 @@ const CircularTimer = ({
       );
     }
     return particles;
+  };
+  
+  // Replace the existing buttons with these improved ones
+  const renderButtons = () => {
+    // Timer not yet started or inactive state
+    if (inactive || (!isPlaying && remainingTime === duration)) {
+      return (
+        <ButtonStyled
+          variant="contained"
+          color="primary"
+          size="large"
+          disabled={inactive}
+          onClick={handleStart}
+          sx={{ 
+            borderRadius: '30px',
+            px: 3,
+            py: 1,
+            fontSize: '1rem',
+            fontWeight: 'bold',
+          }}
+        >
+          <PlayArrow sx={{ mr: 1 }} /> Start
+        </ButtonStyled>
+      );
+    }
+
+    // Timer completed state - show camera and upload buttons
+    if (timerCompleted) {
+      return (
+        <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+          <ActionButtonStyled
+            variant="contained"
+            color="success"
+            type="capture"
+            onClick={handleCapture}
+            startIcon={<PhotoCamera />}
+            sx={{ 
+              borderRadius: '30px',
+              px: 2,
+              py: 1,
+              fontWeight: 'bold',
+            }}
+          >
+            Capture
+          </ActionButtonStyled>
+          
+          <ActionButtonStyled
+            variant="contained"
+            color="primary"
+            type="upload"
+            onClick={handleUpload}
+            startIcon={<Upload />}
+            sx={{ 
+              borderRadius: '30px',
+              px: 2,
+              py: 1,
+              fontWeight: 'bold',
+            }}
+          >
+            Upload
+          </ActionButtonStyled>
+        </Stack>
+      );
+    }
+
+    // Timer in progress (playing or paused)
+    return (
+      <Stack direction="row" spacing={2} sx={{ mt: 2 }}>
+        {isPlaying ? (
+          <ButtonStyled
+            variant="outlined"
+            color="secondary"
+            onClick={handleStop}
+            sx={{ 
+              borderRadius: '30px',
+              minWidth: '120px',
+            }}
+          >
+            <Pause sx={{ mr: 1 }} /> Pause
+          </ButtonStyled>
+        ) : (
+          <ButtonStyled
+            variant="contained"
+            color="primary"
+            onClick={handleResume}
+            sx={{ 
+              borderRadius: '30px',
+              minWidth: '120px',
+            }}
+          >
+            <PlayArrow sx={{ mr: 1 }} /> Resume
+          </ButtonStyled>
+        )}
+        
+        <ButtonStyled
+          variant="outlined"
+          color="error"
+          onClick={handleReset}
+          sx={{ 
+            borderRadius: '30px',
+            minWidth: '120px',
+          }}
+        >
+          <Replay sx={{ mr: 1 }} /> Reset
+        </ButtonStyled>
+      </Stack>
+    );
   };
   
   return (
@@ -517,79 +826,7 @@ const CircularTimer = ({
           justifyContent: 'center'
         }}
       >
-        {/* Start/Pause/Resume button logic */}
-        {inactive ? (
-          <ButtonStyled 
-            variant="contained" 
-            color="primary" 
-            onClick={handleStart} 
-            startIcon={<PlayArrow />}
-            fullWidth={isXs}
-            size={isXs ? "small" : "medium"}
-          >
-            Start
-          </ButtonStyled>
-        ) : isPlaying ? (
-          <ButtonStyled 
-            variant="contained" 
-            color="primary" 
-            onClick={handlePause} 
-            startIcon={<Pause />}
-            fullWidth={isXs}
-            size={isXs ? "small" : "medium"}
-          >
-            Pause
-          </ButtonStyled>
-        ) : timerCompleted ? (
-          <ButtonStyled 
-            variant="contained" 
-            color="primary" 
-            onClick={handleStart} 
-            startIcon={<PlayArrow />}
-            fullWidth={isXs}
-            size={isXs ? "small" : "medium"}
-          >
-            Restart
-          </ButtonStyled>
-        ) : (
-          <ButtonStyled 
-            variant="contained" 
-            color="primary" 
-            onClick={handleResume} 
-            startIcon={<PlayArrow />}
-            fullWidth={isXs}
-            size={isXs ? "small" : "medium"}
-          >
-            Resume
-          </ButtonStyled>
-        )}
-        
-        <ButtonStyled 
-          variant="outlined" 
-          color="info" 
-          onClick={handleReset} 
-          startIcon={<Replay />}
-          disabled={inactive}
-          fullWidth={isXs}
-          size={isXs ? "small" : "medium"}
-        >
-          Reset
-        </ButtonStyled>
-        
-        {/* Automatically show capture button when timer is completed */}
-        {timerCompleted && !inactive && (
-          <ButtonStyled 
-            variant="contained" 
-            color="success" 
-            onClick={handleCapture} 
-            startIcon={<PhotoCamera />}
-            glowing={true}
-            fullWidth={isXs}
-            size={isXs ? "small" : "medium"}
-          >
-            Capture
-          </ButtonStyled>
-        )}
+        {renderButtons()}
       </Stack>
     </Box>
   );

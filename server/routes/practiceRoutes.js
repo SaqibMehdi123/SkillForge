@@ -18,5 +18,7 @@ const upload = multer({ storage });
 router.post('/start', auth, practiceController.startSession);
 router.post('/complete/:id', auth, upload.single('photo'), practiceController.completeSession);
 router.get('/history', auth, practiceController.getHistory);
+router.get('/photos', auth, practiceController.getPracticePhotos);
+router.post('/sessions', auth, practiceController.saveSession);
 
 module.exports = router; 

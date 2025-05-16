@@ -65,6 +65,202 @@ export const loadUser = createAsyncThunk(
   }
 );
 
+// Update user streak when uploading a photo
+export const updateUserStreak = createAsyncThunk(
+  'auth/updateUserStreak',
+  async (_, { getState, dispatch, rejectWithValue }) => {
+    try {
+      // Get current user state
+      const { user } = getState().auth;
+      
+      // Make sure streaks object exists with proper default values
+      const userStreaks = user.streaks || { current: 0, best: 0 };
+      const currentStreak = userStreaks.current || 0;
+      
+      // Check last streak update time
+      const lastStreakUpdate = localStorage.getItem('lastStreakUpdate');
+      const currentTime = Date.now();
+      const THIRTY_HOURS_MS = 30 * 60 * 60 * 1000; // 30 hours in milliseconds
+      
+      let newStreak = 1; // Default is 1 for a new streak day
+      let xpToAdd = 10; // Base XP for daily activity
+      let streakBroken = false;
+      
+      console.log(`Updating streak. Current streak: ${currentStreak}`);
+      
+      if (lastStreakUpdate) {
+        const lastUpdateTime = parseInt(lastStreakUpdate);
+        const timeDiff = currentTime - lastUpdateTime;
+        
+        if (timeDiff < 24 * 60 * 60 * 1000) {
+          // Less than 24 hours - same day, no streak change
+          newStreak = currentStreak || 1; // Ensure at least 1
+          xpToAdd = 5; // Grant small XP for additional activity in same day
+          console.log(`Same day activity. Keeping streak at ${newStreak}`);
+        } else if (timeDiff <= THIRTY_HOURS_MS) {
+          // Between 24 and 30 hours - consecutive day, streak increases
+          newStreak = (currentStreak || 0) + 1;
+          console.log(`New day activity. Increasing streak to ${newStreak}`);
+          
+          // Bonus XP for maintaining streak
+          if (newStreak >= 7) {
+            xpToAdd = 50; // One week streak
+          } else if (newStreak >= 3) {
+            xpToAdd = 25; // Three day streak
+          } else {
+            xpToAdd = 15; // Starting streak
+          }
+        } else {
+          // More than 30 hours - streak broken
+          newStreak = 1;
+          xpToAdd = 10; // Back to base XP
+          streakBroken = true;
+          console.log(`Streak broken. Resetting to ${newStreak}`);
+        }
+      } else {
+        // First time activity - start with streak of 1
+        console.log(`First activity. Starting streak at ${newStreak}`);
+      }
+      
+      // Update local storage with current time
+      localStorage.setItem('lastStreakUpdate', currentTime.toString());
+      
+      // Update streak in database using our async thunk
+      const streakResult = await dispatch(updateStreak({ current: newStreak })).unwrap();
+      console.log("Streak update successful:", streakResult);
+      
+      // Always add some XP to encourage activity
+      if (xpToAdd > 0) {
+        const xpResult = await dispatch(addXP(xpToAdd)).unwrap();
+        console.log("XP added:", xpToAdd, xpResult);
+      }
+      
+      return {
+        current: newStreak,
+        xpAdded: xpToAdd,
+        streakBroken
+      };
+    } catch (error) {
+      console.error("Error in updateUserStreak:", error);
+      return rejectWithValue("Failed to update streak");
+    }
+  }
+);
+
+// Update addXP action to save to database
+export const addXP = createAsyncThunk(
+  'auth/addXP',
+  async (amount, { getState, rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      };
+
+      const response = await axios.post(
+        `${API_URL}/users/xp`, 
+        { xp: amount },
+        config
+      );
+
+      return { xpAdded: amount, userData: response.data.user };
+    } catch (error) {
+      console.error('Error updating XP:', error);
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+// Update addBadge action to save to database
+export const addBadge = createAsyncThunk(
+  'auth/addBadge',
+  async (badgeId, { getState, rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      };
+
+      const response = await axios.post(
+        `${API_URL}/users/badge`, 
+        { badgeId },
+        config
+      );
+
+      return { badgeId, badges: response.data.badges };
+    } catch (error) {
+      console.error('Error adding badge:', error);
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
+// Update updateStreak action to save to database
+export const updateStreak = createAsyncThunk(
+  'auth/updateStreak',
+  async ({ current, best }, { getState, rejectWithValue }) => {
+    try {
+      console.log(`updateStreak called with current=${current}, best=${best}`);
+      
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      };
+
+      const payload = { streak: current };
+      if (best) payload.bestStreak = best;
+
+      console.log(`Sending streak update to server:`, payload);
+      
+      const response = await axios.post(
+        `${API_URL}/users/streak`, 
+        payload,
+        config
+      );
+
+      console.log(`Streak update response:`, response.data);
+      
+      // Also check for streak achievements
+      try {
+        await axios.post(
+          `${API_URL}/achievements/check-streak`,
+          { streak: current },
+          config
+        );
+      } catch (achievementError) {
+        console.error('Error checking streak achievements:', achievementError);
+        // Continue even if achievement checking fails
+      }
+
+      return response.data.streaks;
+    } catch (error) {
+      console.error('Error updating streak:', error);
+      return rejectWithValue(error.message);
+    }
+  }
+);
+
 const initialState = {
   isAuthenticated: false,
   user: {
@@ -77,7 +273,8 @@ const initialState = {
     level: 1,
     streaks: {
       current: 0,
-      longest: 0,
+      best: 0, // Renamed from longest to best for consistency
+      lastUpdate: null
     },
     badges: [],
   },
@@ -108,18 +305,10 @@ const authSlice = createSlice({
       state.user = initialState.user;
       state.loading = false;
       state.error = null;
+      localStorage.removeItem('lastStreakUpdate');
     },
     updateUser: (state, action) => {
       state.user = { ...state.user, ...action.payload };
-    },
-    addXP: (state, action) => {
-      state.user.xp += action.payload;
-      // Level up for every 100 XP
-      while (state.user.xp >= state.user.level * 100) {
-        state.user.xp -= state.user.level * 100;
-        state.user.level += 1;
-        state.user.coins += 10; // Reward coins on level up
-      }
     },
     addCoins: (state, action) => {
       state.user.coins += action.payload;
@@ -130,15 +319,11 @@ const authSlice = createSlice({
     setAvatar: (state, action) => {
       state.user.avatar = action.payload;
     },
-    addBadge: (state, action) => {
-      if (!state.user.badges.includes(action.payload)) {
-        state.user.badges.push(action.payload);
-      }
-    },
-    updateStreak: (state, action) => {
+    setStreak: (state, action) => {
       state.user.streaks.current = action.payload.current;
-      if (action.payload.current > state.user.streaks.longest) {
-        state.user.streaks.longest = action.payload.current;
+      state.user.streaks.lastUpdate = Date.now();
+      if (action.payload.current > state.user.streaks.best) {
+        state.user.streaks.best = action.payload.current;
       }
     },
   },
@@ -182,6 +367,68 @@ const authSlice = createSlice({
       .addCase(loadUser.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      })
+      // Update Streak
+      .addCase(updateUserStreak.fulfilled, (state, action) => {
+        state.user.streaks.current = action.payload.current;
+        state.user.streaks.lastUpdate = Date.now();
+        if (action.payload.current > state.user.streaks.best) {
+          state.user.streaks.best = action.payload.current;
+        }
+      })
+      // Add XP
+      .addCase(addXP.fulfilled, (state, action) => {
+        const { xpAdded, userData } = action.payload;
+        
+        if (userData) {
+          // If server response has user data, use it
+          state.user.xp = userData.xp;
+          state.user.level = userData.level;
+          state.user.coins = userData.coins;
+        } else {
+          // Fallback to local calculation if no server data
+          state.user.xp += xpAdded;
+          // Level up for every 100 XP
+          while (state.user.xp >= state.user.level * 100) {
+            state.user.xp -= state.user.level * 100;
+            state.user.level += 1;
+            state.user.coins += 10; // Reward coins on level up
+          }
+        }
+      })
+      .addCase(addXP.rejected, (state, action) => {
+        console.error('XP update failed:', action.payload);
+        // Still update locally as fallback
+        state.user.xp += action.meta.arg;
+      })
+      // Add Badge
+      .addCase(addBadge.fulfilled, (state, action) => {
+        if (!state.user.badges.includes(action.payload.badgeId)) {
+          state.user.badges.push(action.payload.badgeId);
+        }
+      })
+      .addCase(addBadge.rejected, (state, action) => {
+        console.error('Badge update failed:', action.payload);
+        // Still update locally as fallback
+        if (!state.user.badges.includes(action.meta.arg)) {
+          state.user.badges.push(action.meta.arg);
+        }
+      })
+      // Update Streak
+      .addCase(updateStreak.fulfilled, (state, action) => {
+        state.user.streaks = action.payload;
+      })
+      .addCase(updateStreak.rejected, (state, action) => {
+        console.error('Streak update failed:', action.payload);
+        // Still update locally as fallback
+        if (action.meta.arg.current) {
+          state.user.streaks.current = action.meta.arg.current;
+          
+          // Update best streak if needed
+          if (action.meta.arg.current > state.user.streaks.best) {
+            state.user.streaks.best = action.meta.arg.current;
+          }
+        }
       });
   },
 });
@@ -192,11 +439,10 @@ export const {
   loginFailure,
   logout,
   updateUser,
-  addXP,
   addCoins,
   spendCoins,
   setAvatar,
-  addBadge,
-  updateStreak,
+  setStreak,
 } = authSlice.actions;
+
 export default authSlice.reducer; 

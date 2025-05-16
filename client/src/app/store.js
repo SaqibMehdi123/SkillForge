@@ -4,6 +4,7 @@ import practiceReducer from '../features/practice/practiceSlice';
 import themeReducer from '../features/theme/themeSlice';
 import friendsReducer from '../features/friends/friendsSlice';
 import messagesReducer from '../features/messages/messagesSlice';
+import uiReducer from '../features/ui/uiSlice';
 
 export const store = configureStore({
   reducer: {
@@ -12,6 +13,7 @@ export const store = configureStore({
     theme: themeReducer,
     friends: friendsReducer,
     messages: messagesReducer,
+    ui: uiReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

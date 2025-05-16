@@ -53,6 +53,7 @@ import {
   clearMessagesError,
   clearCurrentConversation
 } from '../../features/messages/messagesSlice';
+import { updateUserStreak } from '../../features/auth/authSlice';
 import { getFriends } from '../../features/friends/friendsSlice';
 import { getUserPracticePhotos } from '../../features/practice/practiceSlice';
 import { format } from 'date-fns';
@@ -70,18 +71,15 @@ const Messages = () => {
   const { practicePhotos, loading: photosLoading } = useSelector((state) => state.practice);
   
   const [message, setMessage] = useState('');
-  const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
   const [drawerOpen, setDrawerOpen] = useState(!isMobile);
   const [photosDialogOpen, setPhotosDialogOpen] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
-  const [imageSourceMenu, setImageSourceMenu] = useState(null);
   const [conversationCache, setConversationCache] = useState({});
   const [loadedChats, setLoadedChats] = useState({});
   const [pendingSentMessage, setPendingSentMessage] = useState(null);
   
   const messagesEndRef = useRef(null);
-  const fileInputRef = useRef(null);
 
   // Load conversations and friends immediately when component mounts
   useEffect(() => {
@@ -120,6 +118,7 @@ const Messages = () => {
   // Load practice photos and ensure they're accessible on demand
   useEffect(() => {
     if (photosDialogOpen) {
+      // Force a refresh of practice photos whenever dialog opens
       dispatch(getUserPracticePhotos());
     }
   }, [dispatch, photosDialogOpen]);
@@ -132,8 +131,15 @@ const Messages = () => {
     };
   }, [dispatch]);
 
+  // ADDED: Log photos when they change
+  useEffect(() => {
+    if (practicePhotos) {
+      console.log('Photos in Messages component:', practicePhotos.length, practicePhotos);
+    }
+  }, [practicePhotos]);
+
   const handleSend = async () => {
-    if ((!message.trim() && !imageFile && !selectedPhoto) || !userId) return;
+    if ((!message.trim() && !selectedPhoto) || !userId) return;
     
     try {
       // Send the message
@@ -141,13 +147,23 @@ const Messages = () => {
         recipientId: userId,
         recipientName: currentFriend?.username,
         content: message,
-        image: imageFile,
         practicePhotoUrl: selectedPhoto,
       })).unwrap();
       
+      // Update streak if user is sharing a practice photo
+      if (selectedPhoto) {
+        try {
+          // Update user streak whenever a photo is shared (just like when uploaded)
+          await dispatch(updateUserStreak()).unwrap();
+          console.log('Streak updated after sharing photo');
+        } catch (error) {
+          console.error('Error updating streak:', error);
+          // Continue even if streak update fails
+        }
+      }
+      
       // Clear the form
       setMessage('');
-      setImageFile(null);
       setImagePreview('');
       setSelectedPhoto(null);
       
@@ -159,28 +175,9 @@ const Messages = () => {
     }
   };
 
-  const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    
-    setImageFile(file);
-    setSelectedPhoto(null); // Clear any selected practice photo
-    
-    // Create preview
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setImagePreview(reader.result);
-    };
-    reader.readAsDataURL(file);
-  };
-
   const handleClearImage = () => {
-    setImageFile(null);
     setImagePreview('');
     setSelectedPhoto(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
   };
 
   const handleOpenPhotosDialog = () => {
@@ -192,16 +189,36 @@ const Messages = () => {
     setPhotosDialogOpen(false);
   };
 
-  const handleSelectPhoto = (photoUrl) => {
-    // Make sure the URL is properly formatted
-    let formattedUrl = photoUrl;
-    if (!photoUrl.startsWith('http')) {
-      formattedUrl = `http://localhost:5000${photoUrl}`;
+  const handleSelectPhoto = (photo) => {
+    console.log('Photo selected:', photo);
+    
+    // Handle different photo formats
+    let photoUrl;
+    
+    if (typeof photo === 'string') {
+      photoUrl = photo;
+    } else {
+      // Try various possible properties for the URL
+      photoUrl = photo.fullPath || photo.url || photo.path || photo.image;
+      
+      // If it's a data URL, use it directly
+      if (photoUrl && photoUrl.startsWith('data:')) {
+        setSelectedPhoto(photoUrl);
+        setImagePreview(photoUrl);
+        setPhotosDialogOpen(false);
+        return;
+      }
     }
     
-    setSelectedPhoto(formattedUrl);
-    setImageFile(null);
-    setImagePreview('');
+    // Make sure the URL is properly formatted with the server prefix
+    if (photoUrl && !photoUrl.startsWith('http')) {
+      photoUrl = `http://localhost:5000${photoUrl}`;
+    }
+    
+    console.log('Using photo URL:', photoUrl);
+    
+    setSelectedPhoto(photoUrl);
+    setImagePreview(photoUrl);
     setPhotosDialogOpen(false);
   };
 
@@ -234,24 +251,18 @@ const Messages = () => {
     { username: 'User', avatar: null }
   ) : null;
 
-  // Add function to handle image source menu
-  const handleImageSourceClick = (event) => {
-    setImageSourceMenu(event.currentTarget);
-  };
-  
-  const handleImageSourceClose = () => {
-    setImageSourceMenu(null);
-  };
-  
-  const handleDeviceImageClick = () => {
-    fileInputRef.current.click();
-    handleImageSourceClose();
-  };
-  
-  const handlePracticeImageClick = () => {
-    dispatch(getUserPracticePhotos());
+  // Replace the handleImageSourceClick with direct gallery opening
+  const handleImageClick = () => {
+    // Show loading indicator immediately
     setPhotosDialogOpen(true);
-    handleImageSourceClose();
+    // Force fetch the latest practice photos
+    dispatch(getUserPracticePhotos())
+      .then((result) => {
+        console.log('Photos fetched successfully:', result.payload?.length);
+      })
+      .catch((error) => {
+        console.error('Error fetching photos:', error);
+      });
   };
 
   return (
@@ -738,38 +749,15 @@ const Messages = () => {
                 )}
                 
                 <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                  {/* Single image selection button */}
+                  {/* Replace image selection button with direct gallery opener */}
                   <IconButton
                     color="primary"
-                    onClick={handleImageSourceClick}
-                    title="Add image"
+                    onClick={handleImageClick}
+                    title="Add image from gallery"
                     sx={{ color: '#0084FF' }}
                   >
-                    <ImageIcon />
+                    <PhotoIcon />
                   </IconButton>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    style={{ display: 'none' }}
-                    onChange={handleFileSelect}
-                  />
-                  
-                  {/* Image source selection menu */}
-                  <Menu
-                    anchorEl={imageSourceMenu}
-                    open={Boolean(imageSourceMenu)}
-                    onClose={handleImageSourceClose}
-                  >
-                    <MenuItem onClick={handleDeviceImageClick}>
-                      <AttachFileIcon fontSize="small" sx={{ mr: 1 }} />
-                      Upload from device
-                    </MenuItem>
-                    <MenuItem onClick={handlePracticeImageClick}>
-                      <PhotoIcon fontSize="small" sx={{ mr: 1 }} />
-                      Select from practice photos
-                    </MenuItem>
-                  </Menu>
                   
                   <TextField
                     fullWidth
@@ -790,7 +778,7 @@ const Messages = () => {
                   <Button
                     variant="contained"
                     color="primary"
-                    disabled={(!message.trim() && !imageFile && !selectedPhoto) || loading}
+                    disabled={(!message.trim() && !selectedPhoto) || loading}
                     type="submit"
                     sx={{ 
                       borderRadius: '50%', 
@@ -868,7 +856,7 @@ const Messages = () => {
         fullWidth
       >
         <DialogTitle>
-          Share Practice Photo
+          Select Gallery Photo
           <IconButton
             aria-label="close"
             onClick={handleClosePhotosDialog}
@@ -883,56 +871,140 @@ const Messages = () => {
               <CircularProgress />
             </Box>
           ) : practicePhotos && practicePhotos.length > 0 ? (
-            <ImageList cols={isMobile ? 2 : 3} gap={8}>
-              {practicePhotos.map((photo, index) => (
-                <ImageListItem 
-                  key={index} 
-                  onClick={() => handleSelectPhoto(photo.url)}
-                  sx={{ 
-                    cursor: 'pointer',
-                    borderRadius: 1,
-                    overflow: 'hidden',
-                    '&:hover': {
-                      boxShadow: 3,
-                      transform: 'scale(1.02)',
-                      transition: 'all 0.2s'
-                    }
-                  }}
-                >
-                  <img
-                    src={photo.url}
-                    alt={`Practice photo ${index + 1}`}
-                    loading="lazy"
-                    style={{ height: 200, objectFit: 'cover' }}
-                  />
-                  <Box 
-                    sx={{ 
-                      position: 'absolute', 
-                      bottom: 0, 
-                      left: 0, 
-                      right: 0, 
-                      bgcolor: 'rgba(0,0,0,0.6)',
-                      color: 'white',
-                      p: 1,
-                      fontSize: 12
-                    }}
-                  >
-                    {format(new Date(photo.date), 'MMM d, yyyy')}
-                  </Box>
-                </ImageListItem>
-              ))}
-            </ImageList>
+            <>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Select a photo to share in this conversation ({practicePhotos.length} available):
+              </Typography>
+              <ImageList cols={isMobile ? 2 : 3} gap={8}>
+                {practicePhotos.map((photo, index) => {
+                  // Get the image URL from various possible formats
+                  const imageUrl = photo.url || photo.path || 
+                    (photo.image && !photo.image.startsWith('data:') ? photo.image : null);
+                  const displayDate = photo.date || photo.createdAt || photo.timestamp;
+                  
+                  // Skip if no valid image URL
+                  if (!imageUrl) return null;
+                  
+                  console.log(`Photo ${index} URL:`, imageUrl);
+                  
+                  return (
+                    <ImageListItem 
+                      key={index} 
+                      onClick={() => handleSelectPhoto(photo)}
+                      sx={{ 
+                        cursor: 'pointer',
+                        borderRadius: 1,
+                        overflow: 'hidden',
+                        '&:hover': {
+                          boxShadow: 3,
+                          transform: 'scale(1.02)',
+                          transition: 'all 0.2s'
+                        }
+                      }}
+                    >
+                      <img
+                        src={imageUrl}
+                        alt={`Photo ${index + 1}`}
+                        loading="lazy"
+                        style={{ height: 200, objectFit: 'cover' }}
+                        onError={(e) => {
+                          // Handle image load errors by setting a placeholder
+                          console.log('Image failed to load:', imageUrl);
+                          e.target.src = 'https://via.placeholder.com/200?text=Image+Error';
+                        }}
+                      />
+                      {displayDate && (
+                        <Box 
+                          sx={{ 
+                            position: 'absolute', 
+                            bottom: 0, 
+                            left: 0, 
+                            right: 0, 
+                            bgcolor: 'rgba(0,0,0,0.6)',
+                            color: 'white',
+                            p: 1,
+                            fontSize: 12
+                          }}
+                        >
+                          {typeof displayDate === 'string' ? format(new Date(displayDate), 'MMM d, yyyy') : 'Practice Photo'}
+                        </Box>
+                      )}
+                    </ImageListItem>
+                  );
+                }).filter(Boolean)}
+              </ImageList>
+            </>
           ) : (
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 4 }}>
               <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 2 }}>
                 No practice photos available to share.
               </Typography>
+              
+              {/* Create placeholder photos if none are found */}
+              <Box sx={{ width: '100%', my: 2 }}>
+                <Typography variant="body2" color="primary">
+                  Demo photos (for testing):
+                </Typography>
+                <ImageList cols={isMobile ? 2 : 3} gap={8} sx={{ mt: 1 }}>
+                  {[1, 2, 3].map((num) => (
+                    <ImageListItem 
+                      key={`placeholder-${num}`}
+                      onClick={() => handleSelectPhoto({
+                        url: `https://via.placeholder.com/300x200?text=Sample+Photo+${num}`,
+                        date: new Date().toISOString()
+                      })}
+                      sx={{ 
+                        cursor: 'pointer',
+                        borderRadius: 1,
+                        overflow: 'hidden',
+                        '&:hover': {
+                          boxShadow: 3,
+                          transform: 'scale(1.02)',
+                          transition: 'all 0.2s'
+                        }
+                      }}
+                    >
+                      <img
+                        src={`https://via.placeholder.com/300x200?text=Sample+Photo+${num}`}
+                        alt={`Sample photo ${num}`}
+                        loading="lazy"
+                        style={{ height: 200, objectFit: 'cover' }}
+                      />
+                      <Box 
+                        sx={{ 
+                          position: 'absolute', 
+                          bottom: 0, 
+                          left: 0, 
+                          right: 0, 
+                          bgcolor: 'rgba(0,0,0,0.6)',
+                          color: 'white',
+                          p: 1,
+                          fontSize: 12
+                        }}
+                      >
+                        Sample photo {num}
+                      </Box>
+                    </ImageListItem>
+                  ))}
+                </ImageList>
+              </Box>
+              
               <Button 
-                variant="outlined" 
+                variant="contained" 
                 color="primary" 
-                onClick={() => navigate('/practice')}
+                onClick={() => {
+                  handleClosePhotosDialog();
+                  navigate('/practice');
+                }}
+                sx={{
+                  bgcolor: '#0084FF',
+                  '&:hover': {
+                    bgcolor: '#0078E7'
+                  },
+                  mt: 2
+                }}
               >
-                Go to Practice Session
+                Take Real Photos in Practice
               </Button>
             </Box>
           )}
@@ -949,6 +1021,25 @@ const Messages = () => {
             'This conversation is private and only visible to the participants.' : 
             error}
         </Alert>
+      )}
+
+      {/* Debug button for streak testing - only in development */}
+      {process.env.NODE_ENV !== 'production' && (
+        <Box sx={{ position: 'fixed', bottom: 10, right: 10, zIndex: 1000 }}>
+          <Button
+            variant="contained"
+            size="small"
+            color="secondary"
+            onClick={() => {
+              dispatch(updateUserStreak()).then((result) => {
+                console.log("Streak update result:", result);
+                alert(`Streak updated! Current streak: ${result.payload.current}\nXP added: ${result.payload.xpAdded}`);
+              });
+            }}
+          >
+            Test Streak Update
+          </Button>
+        </Box>
       )}
     </Container>
   );
