@@ -1,6 +1,5 @@
 # SkillForge
 
-![SkillForge Logo](https://via.placeholder.com/200x80?text=SkillForge)
 
 ## Overview
 
