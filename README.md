@@ -84,7 +84,7 @@ SkillForge is a comprehensive skill development and social learning platform tha
 4. Running the application
    ```bash
    # Start server (from server directory)
-   npm start
+   node server.js
    
    # Start client (from client directory)
    npm start
