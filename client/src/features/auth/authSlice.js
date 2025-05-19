@@ -3,6 +3,36 @@ import axios from 'axios';
 
 const API_URL = 'http://localhost:5000/api';
 
+// Helper function to check if the stored token is valid
+export const isTokenValid = () => {
+  const token = localStorage.getItem('token');
+  
+  if (!token) {
+    return false;
+  }
+  
+  try {
+    // JWT tokens are in format: header.payload.signature
+    // We can decode the payload to check the expiration
+    const payload = token.split('.')[1];
+    if (!payload) return false;
+    
+    // Decode base64
+    const decodedPayload = JSON.parse(atob(payload));
+    
+    // Check if token is expired
+    if (decodedPayload.exp && decodedPayload.exp * 1000 < Date.now()) {
+      localStorage.removeItem('token'); // Remove expired token
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error validating token:', error);
+    return false;
+  }
+};
+
 // Register user
 export const register = createAsyncThunk(
   'auth/register',
@@ -85,8 +115,9 @@ export const updateUserStreak = createAsyncThunk(
       let newStreak = 1; // Default is 1 for a new streak day
       let xpToAdd = 10; // Base XP for daily activity
       let streakBroken = false;
+      let shouldUpdateStreak = true; // Flag to determine if server update is needed
       
-      console.log(`Updating streak. Current streak: ${currentStreak}`);
+      console.log(`Checking streak. Current streak: ${currentStreak}`);
       
       if (lastStreakUpdate) {
         const lastUpdateTime = parseInt(lastStreakUpdate);
@@ -97,6 +128,7 @@ export const updateUserStreak = createAsyncThunk(
           newStreak = currentStreak || 1; // Ensure at least 1
           xpToAdd = 5; // Grant small XP for additional activity in same day
           console.log(`Same day activity. Keeping streak at ${newStreak}`);
+          shouldUpdateStreak = false; // Don't update streak on server for same-day activities
         } else if (timeDiff <= THIRTY_HOURS_MS) {
           // Between 24 and 30 hours - consecutive day, streak increases
           newStreak = (currentStreak || 0) + 1;
@@ -125,9 +157,15 @@ export const updateUserStreak = createAsyncThunk(
       // Update local storage with current time
       localStorage.setItem('lastStreakUpdate', currentTime.toString());
       
-      // Update streak in database using our async thunk
-      const streakResult = await dispatch(updateStreak({ current: newStreak })).unwrap();
-      console.log("Streak update successful:", streakResult);
+      // Update streak in database only if needed
+      let streakResult;
+      if (shouldUpdateStreak) {
+        streakResult = await dispatch(updateStreak({ current: newStreak })).unwrap();
+        console.log("Streak update successful:", streakResult);
+      } else {
+        console.log("Skipping server streak update for same-day activity");
+        streakResult = userStreaks; // Use existing streak data
+      }
       
       // Always add some XP to encourage activity
       if (xpToAdd > 0) {
@@ -257,6 +295,36 @@ export const updateStreak = createAsyncThunk(
     } catch (error) {
       console.error('Error updating streak:', error);
       return rejectWithValue(error.message);
+    }
+  }
+);
+
+// Update user profile
+export const updateProfile = createAsyncThunk(
+  'auth/updateProfile',
+  async (profileData, { rejectWithValue }) => {
+    try {
+      const token = localStorage.getItem('token');
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      };
+      
+      const response = await axios.put(
+        `${API_URL}/users/me`, 
+        profileData,
+        config
+      );
+      
+      return response.data.user;
+    } catch (error) {
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        'Profile update failed. Please try again.';
+      return rejectWithValue(message);
     }
   }
 );
@@ -429,6 +497,18 @@ const authSlice = createSlice({
             state.user.streaks.best = action.meta.arg.current;
           }
         }
+      })
+      // Update Profile
+      .addCase(updateProfile.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(updateProfile.fulfilled, (state, action) => {
+        state.loading = false;
+        state.user = action.payload;
+      })
+      .addCase(updateProfile.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
       });
   },
 });
@@ -445,4 +525,4 @@ export const {
   setStreak,
 } = authSlice.actions;
 
-export default authSlice.reducer; 
+export default authSlice.reducer;

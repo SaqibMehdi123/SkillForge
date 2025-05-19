@@ -1014,7 +1014,7 @@ const Messages = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Remove the error alert to prevent ObjectId error from showing */}
+      {/* Error handling for conversation errors */}
       {error && error !== "Class constructor ObjectId cannot be invoked without 'new'" && (
         <Alert severity="error" onClose={handleCloseError} sx={{ mt: 2 }}>
           {error.includes('only view conversations with your friends') ? 
@@ -1022,27 +1022,8 @@ const Messages = () => {
             error}
         </Alert>
       )}
-
-      {/* Debug button for streak testing - only in development */}
-      {process.env.NODE_ENV !== 'production' && (
-        <Box sx={{ position: 'fixed', bottom: 10, right: 10, zIndex: 1000 }}>
-          <Button
-            variant="contained"
-            size="small"
-            color="secondary"
-            onClick={() => {
-              dispatch(updateUserStreak()).then((result) => {
-                console.log("Streak update result:", result);
-                alert(`Streak updated! Current streak: ${result.payload.current}\nXP added: ${result.payload.xpAdded}`);
-              });
-            }}
-          >
-            Test Streak Update
-          </Button>
-        </Box>
-      )}
     </Container>
   );
 };
 
-export default Messages; 
+export default Messages;

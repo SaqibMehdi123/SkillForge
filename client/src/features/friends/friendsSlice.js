@@ -9,15 +9,30 @@ export const getAllUsers = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
+      if (!token) {
+        return rejectWithValue('Please log in to view users');
+      }
+      
       const config = {
         headers: {
           Authorization: `Bearer ${token}`,
         },
       };
-      const response = await axios.get(`${API_URL}/users/all`, config);
-      return response.data.data;
+      
+      const response = await axios.get(`${API_URL}/users`, config);
+      
+      if (!response.data) {
+        console.error('Invalid response format:', response);
+        return rejectWithValue('Failed to fetch users');
+      }
+      
+      return response.data.data || [];
     } catch (error) {
-      return rejectWithValue(error.response.data.message);
+      console.error('Error fetching users:', error);
+      return rejectWithValue(
+        error.response?.data?.message || 
+        'Failed to fetch users. Please try again.'
+      );
     }
   }
 );

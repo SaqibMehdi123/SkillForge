@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Fallback: set env vars directly if not loaded
-if (!process.env.MONGO_URI) process.env.MONGO_URI = 'mongodb://localhost:27017/skillforge';
+if (!process.env.MONGO_URI) process.env.MONGO_URI = 'mongodb://127.0.0.1:27017/skillforge';
 if (!process.env.JWT_SECRET) process.env.JWT_SECRET = 'supersecretkey';
 if (!process.env.CLIENT_URL) process.env.CLIENT_URL = 'http://localhost:3000';
 
@@ -30,6 +30,7 @@ app.use(express.urlencoded({ extended: true }));
 // Ensure upload directories exist
 const uploadsDir = path.join(__dirname, 'uploads');
 const messagesUploadsDir = path.join(__dirname, 'uploads/messages');
+const avatarsDir = path.join(__dirname, 'uploads/avatars');
 
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir);
@@ -39,13 +40,21 @@ if (!fs.existsSync(messagesUploadsDir)) {
   fs.mkdirSync(messagesUploadsDir);
 }
 
+if (!fs.existsSync(avatarsDir)) {
+  fs.mkdirSync(avatarsDir);
+}
+
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
+  serverSelectionTimeoutMS: 5000 // Add timeout for server selection
 })
   .then(() => console.log('MongoDB connected'))
-  .catch((err) => console.error('MongoDB connection error:', err));
+  .catch((err) => {
+    console.error('MongoDB connection error:', err);
+    console.log('Please make sure MongoDB is running and accessible');
+  });
 
 // Basic route
 app.get('/', (req, res) => {
@@ -65,7 +74,7 @@ app.use('/api/messages', require('./routes/messageRoutes'));
 app.use('/api/photos', require('./routes/photoRoutes'));
 
 // Serve uploaded files
-app.use('/uploads', express.static('uploads'));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Error handler
 app.use(require('./middleware/errorHandler'));

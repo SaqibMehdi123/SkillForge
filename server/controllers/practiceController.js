@@ -1,5 +1,6 @@
 const PracticeSession = require('../models/PracticeSession');
 const User = require('../models/User');
+const Achievement = require('../models/Achievement');
 const path = require('path');
 const fs = require('fs');
 
@@ -32,22 +33,104 @@ exports.completeSession = async (req, res, next) => {
       session.photo = path.join('uploads', req.file.filename);
     }
     await session.save();
+    
     // Update user XP/coins
     const user = await User.findById(req.user);
     user.xp += session.xpEarned;
     user.coins += session.coinsEarned;
     await user.save();
+    
+    // Check and unlock first_steps achievement if this is their first completed session
+    await checkAndUnlockFirstStepsAchievement(req.user);
+    
     res.json(session);
   } catch (err) {
     next(err);
   }
 };
 
+// Helper function to check and unlock the first_steps achievement
+async function checkAndUnlockFirstStepsAchievement(userId) {
+  try {
+    // Check if this is their first completed session
+    const completedSessions = await PracticeSession.countDocuments({ 
+      user: userId,
+      completed: true 
+    });
+    
+    // Check if they already have the achievement
+    const existingAchievement = await Achievement.findOne({ 
+      user: userId,
+      badgeId: 'first_steps'
+    });
+    
+    // If they completed at least one session and don't have the achievement yet
+    if (completedSessions > 0 && !existingAchievement) {
+      console.log('Unlocking first_steps achievement for user:', userId);
+      
+      // Create the achievement
+      const achievement = await Achievement.create({
+        user: userId,
+        type: 'session',
+        name: 'First Steps',
+        description: 'Complete your first practice session',
+        icon: 'session',
+        badgeId: 'first_steps',
+        dateUnlocked: new Date()
+      });
+      
+      // Add the badge to user and award XP
+      const user = await User.findById(userId);
+      if (user) {
+        // Add badge if not present
+        if (!user.badges.includes('first_steps')) {
+          user.badges.push('first_steps');
+        }
+        
+        // Award 100 XP
+        const xpReward = 100;
+        user.xp += xpReward;
+        
+        // Handle level up
+        while (user.xp >= user.level * 100) {
+          user.xp -= user.level * 100;
+          user.level += 1;
+          user.coins += 10;
+        }
+        
+        await user.save();
+        console.log('First Steps achievement unlocked for user:', userId);
+      }
+    }
+  } catch (error) {
+    console.error('Error checking/unlocking first_steps achievement:', error);
+  }
+}
+
 exports.getHistory = async (req, res, next) => {
   try {
-    const sessions = await PracticeSession.find({ user: req.user }).sort({ startedAt: -1 });
-    res.json(sessions);
+    // Fetch all practice sessions for the user
+    const sessions = await PracticeSession.find({ user: req.user }).sort({ createdAt: -1 });
+    
+    // Map any client-specific properties to match the expected format
+    const formattedSessions = sessions.map(session => {
+      const sessionObj = session.toObject();
+      return {
+        ...sessionObj,
+        id: sessionObj._id, // Add ID field that client expects
+        label: sessionObj.skill, // Use skill name as label
+        name: sessionObj.skill, // Also set name field for consistency
+        completedAt: sessionObj.endedAt, // Map endedAt to completedAt for client
+        // Convert duration from minutes (DB) to seconds (client)
+        duration: sessionObj.duration * 60,
+        progress: sessionObj.completed ? 100 : 0,
+      };
+    });
+    
+    console.log(`Found ${formattedSessions.length} practice sessions for user ${req.user}`);
+    res.json(formattedSessions);
   } catch (err) {
+    console.error('Error fetching practice history:', err);
     next(err);
   }
 };
@@ -142,6 +225,9 @@ exports.saveSession = async (req, res, next) => {
       user.coins = (user.coins || 0) + session.coinsEarned;
       await user.save();
     }
+    
+    // Check and unlock first_steps achievement
+    await checkAndUnlockFirstStepsAchievement(req.user);
     
     res.status(201).json({ 
       success: true, 

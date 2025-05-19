@@ -37,7 +37,7 @@ export const completeSession = createAsyncThunk(
 // New async thunk to save practice session data
 export const savePracticeSession = createAsyncThunk(
   'practice/savePracticeSession',
-  async (taskData, { rejectWithValue }) => {
+  async (taskData, { rejectWithValue, dispatch }) => {
     try {
       const token = localStorage.getItem('token');
       const config = {
@@ -77,6 +77,15 @@ export const savePracticeSession = createAsyncThunk(
       );
       
       console.log('Practice session saved:', response.data);
+      
+      // Fetch updated practice history to refresh dashboards and stats
+      try {
+        await dispatch(getHistory());
+      } catch (historyError) {
+        console.error('Error fetching updated practice history:', historyError);
+        // Continue even if history fetch fails
+      }
+      
       return response.data;
     } catch (error) {
       console.error('Error saving practice session:', error);
@@ -461,8 +470,24 @@ const practiceSlice = createSlice({
         state.error = action.payload;
       })
       .addCase(getHistory.fulfilled, (state, action) => {
-        state.tasks = action.payload.filter((s) => !s.completed);
-        state.completedTasks = action.payload.filter((s) => s.completed);
+        // Make sure we handle cases where the backend returns empty arrays or non-array data
+        if (Array.isArray(action.payload)) {
+          state.loading = false;
+          state.tasks = action.payload.filter((s) => !s.completed);
+          state.completedTasks = action.payload.filter((s) => s.completed);
+          // Sort completed tasks by date, most recent first
+          state.completedTasks.sort((a, b) => {
+            const dateA = new Date(a.endedAt || a.completedAt || a.updatedAt || a.createdAt);
+            const dateB = new Date(b.endedAt || b.completedAt || b.updatedAt || b.createdAt);
+            return dateB - dateA;
+          });
+        } else {
+          console.error('Practice history data is not an array:', action.payload);
+          state.loading = false;
+          // Set default empty arrays to avoid breaking the app
+          state.tasks = [];
+          state.completedTasks = [];
+        }
       })
       .addCase(saveTaskPhoto.pending, (state) => {
         state.loading = true;

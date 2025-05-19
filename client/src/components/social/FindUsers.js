@@ -23,8 +23,9 @@ import {
   PersonAdd as PersonAddIcon,
   Search as SearchIcon,
   HourglassEmpty as PendingIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
-import { getAllUsers, sendFriendRequest } from '../../features/friends/friendsSlice';
+import { getAllUsers, sendFriendRequest, clearFriendsError } from '../../features/friends/friendsSlice';
 
 const FindUsers = () => {
   const dispatch = useDispatch();
@@ -35,28 +36,37 @@ const FindUsers = () => {
   const [pendingUsers, setPendingUsers] = useState([]); // Track users with pending requests during this session
 
   useEffect(() => {
-    dispatch(getAllUsers());
+    fetchUsers();
   }, [dispatch]);
 
   useEffect(() => {
-    if (allUsers.length > 0) {
+    if (allUsers && allUsers.length > 0) {
       filterUsers();
+    } else {
+      setSearchResults([]);
     }
   }, [allUsers, searchTerm, friends, sentRequests, pendingRequests, pendingUsers]);
 
+  const fetchUsers = () => {
+    dispatch(getAllUsers());
+  };
+
   const filterUsers = () => {
-    if (!allUsers) return;
+    if (!allUsers || !Array.isArray(allUsers)) return;
+    
+    // Ensure friends is an array
+    const friendsList = Array.isArray(friends) ? friends : [];
     
     // Filter out the current user and already friends
     let filteredUsers = allUsers.filter(u => 
       u._id !== user.id && 
-      !friends.some(f => f._id === u._id)
+      !friendsList.some(f => f._id === u._id)
     );
 
     // Filter by search term if any
     if (searchTerm.trim()) {
       filteredUsers = filteredUsers.filter(u => 
-        u.username.toLowerCase().includes(searchTerm.toLowerCase())
+        u.username && u.username.toLowerCase().includes(searchTerm.toLowerCase())
       );
     }
 
@@ -72,23 +82,41 @@ const FindUsers = () => {
   };
 
   const isPendingRequest = (userId) => {
-    return pendingRequests.some(req => req.sender._id === userId);
+    const pendingList = Array.isArray(pendingRequests) ? pendingRequests : [];
+    return pendingList.some(req => req.sender && req.sender._id === userId);
   };
 
   const isSentRequest = (userId) => {
-    return sentRequests.some(req => req.recipient._id === userId) || pendingUsers.includes(userId);
+    const sentList = Array.isArray(sentRequests) ? sentRequests : [];
+    return sentList.some(req => req.recipient && req.recipient._id === userId) || pendingUsers.includes(userId);
   };
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
   };
+  
+  const handleRefresh = () => {
+    dispatch(clearFriendsError());
+    fetchUsers();
+  };
 
   return (
     <Container maxWidth="md" sx={{ mt: 4 }}>
       <Paper sx={{ p: 3 }}>
-        <Typography variant="h5" gutterBottom>
-          Find Users
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h5">
+            Find Users
+          </Typography>
+          <Button 
+            startIcon={<RefreshIcon />}
+            onClick={handleRefresh}
+            disabled={loading}
+            variant="outlined"
+            size="small"
+          >
+            Refresh
+          </Button>
+        </Box>
         
         <TextField
           fullWidth
@@ -106,31 +134,47 @@ const FindUsers = () => {
           }}
         />
 
-        {loading && !searchResults.length ? (
+        {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
             <CircularProgress />
           </Box>
+        ) : error ? (
+          <Alert 
+            severity="error" 
+            sx={{ mb: 3 }}
+            action={
+              <Button color="inherit" size="small" onClick={handleRefresh}>
+                RETRY
+              </Button>
+            }
+          >
+            {error}
+          </Alert>
+        ) : !allUsers || allUsers.length === 0 ? (
+          <Alert severity="info" sx={{ mb: 3 }}>
+            No users found in the system.
+          </Alert>
         ) : searchResults.length === 0 ? (
           <Typography variant="body1" color="text.secondary" align="center" sx={{ py: 3 }}>
             {searchTerm ? 'No users found matching your search.' : 'No users available to add.'}
           </Typography>
         ) : (
           <List>
-            {searchResults.map((user) => {
-              const pendingIncoming = isPendingRequest(user._id);
-              const pendingOutgoing = isSentRequest(user._id);
+            {searchResults.map((userData) => {
+              const pendingIncoming = isPendingRequest(userData._id);
+              const pendingOutgoing = isSentRequest(userData._id);
               
               return (
-                <React.Fragment key={user._id}>
+                <React.Fragment key={userData._id}>
                   <ListItem>
                     <ListItemAvatar>
-                      <Avatar src={user.avatar} alt={user.username} sx={{ width: 50, height: 50 }}>
-                        {user.username?.charAt(0).toUpperCase()}
+                      <Avatar src={userData.avatar} alt={userData.username} sx={{ width: 50, height: 50 }}>
+                        {userData.username?.charAt(0).toUpperCase()}
                       </Avatar>
                     </ListItemAvatar>
                     <ListItemText
-                      primary={<Typography variant="body1" fontWeight={500}>{user.username}</Typography>}
-                      secondary={`Level ${user.level || 1} • ${user.xp || 0} XP`}
+                      primary={<Typography variant="body1" fontWeight={500}>{userData.username}</Typography>}
+                      secondary={`Level ${userData.level || 1} • ${userData.xp || 0} XP`}
                     />
                     <ListItemSecondaryAction>
                       {pendingIncoming ? (
@@ -165,8 +209,8 @@ const FindUsers = () => {
                           variant="contained"
                           color="primary"
                           startIcon={<PersonAddIcon />}
-                          onClick={() => handleSendRequest(user._id)}
-                          disabled={loading || pendingUsers.includes(user._id)}
+                          onClick={() => handleSendRequest(userData._id)}
+                          disabled={loading || pendingUsers.includes(userData._id)}
                           sx={{ 
                             bgcolor: '#0084FF',
                             '&:hover': {
@@ -184,12 +228,6 @@ const FindUsers = () => {
               );
             })}
           </List>
-        )}
-
-        {error && (
-          <Alert severity="error" sx={{ mt: 2 }}>
-            {error}
-          </Alert>
         )}
       </Paper>
     </Container>

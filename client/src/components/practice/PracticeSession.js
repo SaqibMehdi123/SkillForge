@@ -56,7 +56,8 @@ import {
   getUserPhotos,
   saveTaskPhoto,
   savePracticeSession,
-  getUserPracticePhotos
+  getUserPracticePhotos,
+  getHistory
 } from '../../features/practice/practiceSlice';
 import { updateUserStreak } from '../../features/auth/authSlice';
 import { setNavbarTitle } from '../../features/ui/uiSlice';
@@ -126,6 +127,7 @@ const PracticeSession = () => {
   useEffect(() => {
     dispatch(getUserPhotos());
     dispatch(getUserPracticePhotos()); // Also load practice photos
+    dispatch(getHistory()); // Load practice history
   }, [dispatch]);
 
   // Add a new task
@@ -157,7 +159,23 @@ const PracticeSession = () => {
   
   const handleComplete = () => {
     // Timer has completed, the camera button will automatically appear
-    // No action needed here - CircularTimer component handles the state
+    // Save the practice session when the timer completes
+    if (currentTask) {
+      // Create session data
+      dispatch(savePracticeSession({
+        ...currentTask,
+        image: currentTask.image || null
+      }))
+        .then((result) => {
+          console.log('Practice session saved automatically on completion:', result);
+          dispatch(completeTask());
+          // Load updated history after completing task
+          dispatch(getHistory());
+        })
+        .catch(error => {
+          console.error('Error saving practice session on completion:', error);
+        });
+    }
   };
   
   // Simplified update time handler - now the timer manages updates itself
@@ -1493,35 +1511,9 @@ const PracticeSession = () => {
           }}
         />
 
-        {/* Footer Content - always visible */}
-        <Box sx={{ 
-          mt: 'auto', 
-          pt: 2, 
-          display: 'flex', 
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 1
-        }}>
-          {/* Debug button for streak testing */}
-          {process.env.NODE_ENV !== 'production' && (
-            <Button 
-              variant="outlined" 
-              size="small"
-              onClick={() => {
-                dispatch(updateUserStreak()).then(result => {
-                  console.log("Streak update result:", result);
-                  alert(`Streak updated to: ${result.payload.current}`);
-                });
-              }}
-              sx={{ mb: 2 }}
-            >
-              Test Streak Update
-            </Button>
-          )}
-        </Box>
       </Container>
     </Box>
   );
 };
 
-export default PracticeSession; 
+export default PracticeSession;

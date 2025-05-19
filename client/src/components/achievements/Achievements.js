@@ -116,23 +116,134 @@ const achievementsList = [
     requirement: 10,
     color: '#ffc107', // Amber
   },
+  {
+    id: 'early_bird',
+    title: 'Early Bird',
+    description: 'Complete a practice session before 9 AM',
+    icon: <TimeIcon sx={{ fontSize: 40 }} />,
+    xp: 150,
+    type: 'session',
+    requirement: 1,
+    color: '#ffeb3b', // Yellow
+  },
+  {
+    id: 'night_owl',
+    title: 'Night Owl',
+    description: 'Complete a practice session after 10 PM',
+    icon: <TimeIcon sx={{ fontSize: 40 }} />,
+    xp: 150,
+    type: 'session',
+    requirement: 1,
+    color: '#3f51b5', // Indigo
+  },
+  {
+    id: 'weekend_warrior',
+    title: 'Weekend Warrior',
+    description: 'Complete sessions on both Saturday and Sunday',
+    icon: <TimelineIcon sx={{ fontSize: 40 }} />,
+    xp: 200,
+    type: 'session',
+    requirement: 2,
+    color: '#009688', // Teal
+  },
+  {
+    id: 'photography_novice',
+    title: 'Photography Novice',
+    description: 'Upload your first practice photo',
+    icon: <ImageIcon sx={{ fontSize: 40 }} />,
+    xp: 100,
+    type: 'photo',
+    requirement: 1,
+    color: '#673ab7', // Deep Purple
+  },
+  {
+    id: 'photography_enthusiast',
+    title: 'Photography Enthusiast',
+    description: 'Upload 25 practice photos',
+    icon: <ImageIcon sx={{ fontSize: 40 }} />,
+    xp: 350,
+    type: 'photo',
+    requirement: 25,
+    color: '#8e24aa', // Purple darken-1
+  },
+  {
+    id: 'photography_pro',
+    title: 'Photography Pro',
+    description: 'Upload 50 practice photos',
+    icon: <ImageIcon sx={{ fontSize: 40 }} />,
+    xp: 500,
+    type: 'photo',
+    requirement: 50,
+    color: '#6a1b9a', // Purple darken-3
+  },
+  {
+    id: 'first_hour',
+    title: 'First Hour',
+    description: 'Accumulate 1 hour of practice time',
+    icon: <TimeIcon sx={{ fontSize: 40 }} />,
+    xp: 100,
+    type: 'time',
+    requirement: 60, // in minutes
+    color: '#00acc1', // Cyan darken-1
+  },
+  {
+    id: 'half_day',
+    title: 'Half Day',
+    description: 'Accumulate 12 hours of practice time',
+    icon: <TimeIcon sx={{ fontSize: 40 }} />,
+    xp: 300,
+    type: 'time',
+    requirement: 720, // in minutes
+    color: '#0097a7', // Cyan darken-2
+  },
+  {
+    id: 'centurion',
+    title: 'Centurion',
+    description: 'Complete 100 practice sessions',
+    icon: <TimelineIcon sx={{ fontSize: 40 }} />,
+    xp: 1000,
+    type: 'session',
+    requirement: 100,
+    color: '#1976d2', // Blue darken-2
+  },
+  {
+    id: 'level_5',
+    title: 'Halfway There',
+    description: 'Reach level 5',
+    icon: <TrophyIcon sx={{ fontSize: 40 }} />,
+    xp: 500,
+    type: 'level',
+    requirement: 5,
+    color: '#ffa000', // Amber darken-2
+  },
+  {
+    id: 'elite_status',
+    title: 'Elite Status',
+    description: 'Reach level 20',
+    icon: <TrophyIcon sx={{ fontSize: 40 }} />,
+    xp: 2500,
+    type: 'level',
+    requirement: 20,
+    color: '#ff6f00', // Amber darken-4
+  },
 ];
 
 const Achievements = () => {
   const dispatch = useDispatch();
   const theme = useTheme();
-  const { user } = useSelector((state) => state.auth);
-  const { completedTasks, photos } = useSelector((state) => state.practice);
+  const { user = {} } = useSelector((state) => state.auth);
+  const { completedTasks = [], photos = [] } = useSelector((state) => state.practice) || { completedTasks: [], photos: [] };
   const [earnedAchievements, setEarnedAchievements] = useState([]);
   const [recentAchievements, setRecentAchievements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [activeTab, setActiveTab] = useState(0); // 0 = All, 1 = Unlocked
 
   // Calculate total practice time in minutes
-  const totalPracticeMinutes = completedTasks.reduce(
-    (total, task) => total + Math.floor((task.duration || 0) / 60), 
+  const totalPracticeMinutes = Array.isArray(completedTasks) ? completedTasks.reduce(
+    (total, task) => total + Math.floor(((task && task.duration) || 0) / 60), 
     0
-  );
+  ) : 0;
 
   // Fetch achievements from the server
   useEffect(() => {
@@ -302,13 +413,15 @@ const Achievements = () => {
 
   // Get progress for an achievement
   const getAchievementProgress = (achievement) => {
+    if (!achievement) return { current: 0, required: 1, percentage: 0 };
+
     const stats = {
       streak: user?.streaks?.current || 0,
       bestStreak: user?.streaks?.best || 0,
-      sessions: completedTasks.length,
+      sessions: Array.isArray(completedTasks) ? completedTasks.length : 0,
       level: user?.level || 1,
-      photos: photos.length,
-      minutes: totalPracticeMinutes,
+      photos: Array.isArray(photos) ? photos.length : 0,
+      minutes: totalPracticeMinutes || 0,
     };
 
     let current = 0;
@@ -334,8 +447,8 @@ const Achievements = () => {
 
     return {
       current,
-      required: achievement.requirement,
-      percentage: Math.min(100, Math.round((current / achievement.requirement) * 100)),
+      required: achievement.requirement || 1,
+      percentage: Math.min(100, Math.round((current / (achievement.requirement || 1)) * 100)),
     };
   };
 
@@ -392,8 +505,22 @@ const Achievements = () => {
 
   // Helper function to get XP for a badge ID
   const getXpForBadge = (badgeId) => {
+    if (!badgeId) return 100;
     const achievement = achievementsList.find(a => a.id === badgeId);
     return achievement ? achievement.xp : 100;
+  };
+
+  // Fix icon rendering from string to component
+  const renderAchievementIcon = (achievement) => {
+    if (!achievement) return <StarIcon sx={{ fontSize: 40 }} />;
+    
+    // If the achievement already has an icon component, use it
+    if (React.isValidElement(achievement.icon)) {
+      return achievement.icon;
+    }
+    
+    // Otherwise, use the string icon type to get the appropriate icon component
+    return getIconByType(achievement.icon);
   };
 
   if (loading) {
@@ -474,13 +601,13 @@ const Achievements = () => {
               />
               <Chip 
                 icon={<TrophyIcon />} 
-                label={`${earnedAchievements.length} Achievements`} 
+                label={`${earnedAchievements?.length || 0} Achievements`} 
                 color="primary" 
                 variant="outlined" 
               />
               <Chip 
                 icon={<TimelineIcon />} 
-                label={`${completedTasks.length} Sessions`} 
+                label={`${Array.isArray(completedTasks) ? completedTasks.length : 0} Sessions`} 
                 color="success" 
                 variant="outlined" 
               />
@@ -489,7 +616,7 @@ const Achievements = () => {
         </Grid>
 
         {/* Recent Achievements */}
-        {recentAchievements.length > 0 && (
+        {Array.isArray(recentAchievements) && recentAchievements.length > 0 && (
           <Grid item xs={12}>
             <Paper sx={{ 
               p: 3, 
@@ -531,9 +658,7 @@ const Achievements = () => {
                               mr: 2
                             }}
                           >
-                            {typeof achievement.icon === 'string' 
-                              ? getIconByType(achievement.icon) 
-                              : React.cloneElement(achievement.icon, { sx: { fontSize: 24 } })}
+                            {renderAchievementIcon(achievement)}
                           </Avatar>
                           <Box>
                             <Typography variant="h6" gutterBottom>
@@ -564,17 +689,46 @@ const Achievements = () => {
           </Grid>
         )}
 
-        {/* Achievements List */}
+        {/* Achievement Tabs */}
         <Grid item xs={12}>
-          <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
-            <PremiumIcon sx={{ mr: 1 }} />
-            Achievements
-          </Typography>
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            mb: 2,
+            mt: 2
+          }}>
+            <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center' }}>
+              <PremiumIcon sx={{ mr: 1 }} />
+              Achievements
+            </Typography>
+            
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Chip 
+                label="All Achievements" 
+                color={activeTab === 0 ? "primary" : "default"}
+                variant={activeTab === 0 ? "filled" : "outlined"}
+                onClick={() => setActiveTab(0)}
+                sx={{ fontWeight: activeTab === 0 ? 'bold' : 'normal' }}
+              />
+              <Chip 
+                label={`Unlocked (${earnedAchievements?.length || 0})`} 
+                color={activeTab === 1 ? "primary" : "default"}
+                variant={activeTab === 1 ? "filled" : "outlined"}
+                onClick={() => setActiveTab(1)}
+                sx={{ fontWeight: activeTab === 1 ? 'bold' : 'normal' }}
+              />
+            </Box>
+          </Box>
         </Grid>
 
-        {achievementsList.map((achievement) => {
-          const isEarned = earnedAchievements.some(a => a.id === achievement.id);
+        {/* Filtered Achievements List */}
+        {(activeTab === 0 ? (Array.isArray(achievementsList) ? achievementsList : []) : (Array.isArray(earnedAchievements) ? earnedAchievements : [])).map((achievement) => {
+          if (!achievement) return null;
+          const isEarned = Array.isArray(earnedAchievements) && earnedAchievements.some(a => a && a.id === achievement.id);
           const progress = getAchievementProgress(achievement);
+          
+          if (activeTab === 1 && !isEarned) return null; // Skip non-earned achievements when on Unlocked tab
           
           return (
             <Grid item xs={12} sm={6} md={3} key={achievement.id}>
@@ -643,10 +797,10 @@ const Achievements = () => {
                       }}
                     >
                       {isEarned 
-                        ? achievement.icon 
+                        ? renderAchievementIcon(achievement)
                         : <Tooltip title="Not yet earned">
                             <Box sx={{ position: 'relative' }}>
-                              {achievement.icon}
+                              {renderAchievementIcon(achievement)}
                               <LockIcon 
                                 sx={{ 
                                   position: 'absolute', 
@@ -682,7 +836,7 @@ const Achievements = () => {
                       sx={{ mb: 2 }}
                     />
                     
-                    {!isEarned && (
+                    {!isEarned && activeTab === 0 && (
                       <Box sx={{ width: '100%', mt: 1 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                           <Typography variant="caption" color="text.secondary">

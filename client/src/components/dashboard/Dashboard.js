@@ -43,6 +43,7 @@ import {
   Speed as SpeedIcon,
   DirectionsRun as ActivityIcon
 } from '@mui/icons-material';
+import { getHistory } from '../../features/practice/practiceSlice';
 
 const Dashboard = () => {
   const { user } = useSelector((state) => state.auth);
@@ -59,6 +60,11 @@ const Dashboard = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.down('md'));
   const [activeTab, setActiveTab] = useState(0);
+
+  // Fetch practice session history when component mounts
+  useEffect(() => {
+    dispatch(getHistory());
+  }, [dispatch]);
 
   // Helper to format seconds as mm:ss
   const formatTime = (seconds) => {
@@ -148,19 +154,60 @@ const Dashboard = () => {
 
   const streakExpiry = getStreakExpiryInfo();
 
-  // Calculate date-based metrics (dummy data as placeholder)
-  const daysActive = user?.daysActive || 0;
-  const completionRate = completedTasks.length > 0 
+  // Calculate date-based metrics
+  const daysActive = completedTasks.length > 0 
+    ? new Set(completedTasks.map(task => new Date(task.endedAt || task.completedAt).toDateString())).size 
+    : 0;
+    
+  // Calculate completion rate based on completed vs total sessions
+  const completionRate = completedTasks.length > 0 || tasks.length > 0
     ? Math.round((completedTasks.length / (completedTasks.length + tasks.length)) * 100) 
     : 0;
 
   // Create weekly data for chart
   const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const weeklyActivity = weekdays.map(day => ({
-    day,
-    minutes: Math.floor(Math.random() * 60), // Placeholder data
-    completed: Math.floor(Math.random() * 3)
-  }));
+  
+  // Calculate real weekly activity data from completed tasks
+  const getWeeklyActivityData = () => {
+    const today = new Date();
+    const dayOfWeek = today.getDay(); // 0 (Sun) - 6 (Sat)
+    
+    // Create a date for the Monday of current week
+    const monday = new Date(today);
+    monday.setDate(today.getDate() - ((dayOfWeek + 6) % 7));
+    monday.setHours(0, 0, 0, 0);
+    
+    // Initialize activity data for each day of the week
+    const activityData = weekdays.map((day, index) => {
+      const date = new Date(monday);
+      date.setDate(monday.getDate() + index);
+      return {
+        day,
+        date: date,
+        minutes: 0,
+        completed: 0
+      };
+    });
+    
+    // Populate with real data from completed tasks
+    completedTasks.forEach(task => {
+      const taskDate = new Date(task.endedAt || task.completedAt);
+      
+      // Check if task falls within current week
+      if (taskDate >= monday && taskDate <= today) {
+        // Get the day index (0 = Monday, 6 = Sunday)
+        const dayIndex = (taskDate.getDay() + 6) % 7;
+        
+        // Add minutes and count completion
+        activityData[dayIndex].minutes += Math.floor((task.duration || 0) / 60);
+        activityData[dayIndex].completed += 1;
+      }
+    });
+    
+    return activityData;
+  };
+  
+  const weeklyActivity = getWeeklyActivityData();
 
   useEffect(() => {
     setLiveTime(currentTask?.remaining || 0);
@@ -217,7 +264,7 @@ const Dashboard = () => {
                     textShadow: '0 2px 10px rgba(0,0,0,0.2)'
                   }}
                 >
-                  Welcome back, {user?.username || 'Artist'}!
+                  Welcome, {user?.username || 'Artist'}!
             </Typography>
                 <Typography 
                   variant="h6" 
@@ -373,7 +420,7 @@ const Dashboard = () => {
 
         {/* Tab Content */}
         {activeTab === 0 && (
-          <Grid container spacing={3}>
+          <Grid container spacing={3} sx={{ mt: 2 }}>
             {/* Stats Cards Row */}
             <Grid item xs={12}>
               <Grid container spacing={2}>
@@ -820,7 +867,7 @@ const Dashboard = () => {
         )}
 
         {activeTab === 1 && (
-          <Grid container spacing={3}>
+          <Grid container spacing={3} sx={{ mt: 2 }}>
             {/* Progress Tab Content */}
             <Grid item xs={12} md={6}>
               <Card elevation={2} sx={{ borderRadius: 2 }}>
@@ -896,8 +943,9 @@ const Dashboard = () => {
                       </Box>
                     </Box>
                     <Typography variant="body2" align="center" sx={{ maxWidth: 250 }}>
-                      You've completed {completedTasks.length} out of {completedTasks.length + tasks.length} total practice sessions
-                </Typography>
+                      You've completed {completedTasks.length} out of {completedTasks.length + tasks.length} total
+                      practice sessions
+                    </Typography>
                   </Box>
                 </CardContent>
               </Card>
@@ -906,7 +954,7 @@ const Dashboard = () => {
         )}
 
         {activeTab === 2 && (
-          <Grid container spacing={3}>
+          <Grid container spacing={3} sx={{ mt: 2 }}>
             {/* Streaks & XP Tab Content */}
             <Grid item xs={12} md={6}>
               <Card elevation={2} sx={{ borderRadius: 2 }}>
@@ -1068,7 +1116,7 @@ const Dashboard = () => {
         )}
 
         {activeTab === 3 && (
-          <Grid container spacing={3}>
+          <Grid container spacing={3} sx={{ mt: 2 }}>
             {/* Activity Tab Content */}
             <Grid item xs={12}>
               <Card elevation={2} sx={{ borderRadius: 2 }}>
@@ -1097,29 +1145,31 @@ const Dashboard = () => {
                           opacity: day.minutes > 0 ? 1 : 0.3,
                         }}>
                           {day.completed > 0 && (
-                            <Box sx={{ 
-                              position: 'absolute', 
-                              top: -10, 
-                              right: -10, 
-                              backgroundColor: 'success.main',
-                              borderRadius: '50%',
-                              width: 20,
-                              height: 20,
-                display: 'flex',
-                              justifyContent: 'center',
-                              alignItems: 'center',
-                              border: '2px solid white',
-                              boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
-                            }}>
-                              <Typography variant="caption" sx={{ fontSize: '0.6rem', color: 'white', fontWeight: 'bold' }}>
-                                {day.completed}
-            </Typography>
+                            <Box
+                              sx={{
+                                position: 'absolute',
+                                top: -10,
+                                right: -10,
+                                bgcolor: 'success.main',
+                                color: 'white',
+                                borderRadius: '50%',
+                                width: 20,
+                                height: 20,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '0.75rem',
+                                fontWeight: 'bold',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                              }}
+                            >
+                              {day.completed}
                             </Box>
                           )}
                         </Box>
-                        <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                           {day.day}
-            </Typography>
+                        </Typography>
                       </Box>
                     ))}
                   </Box>
@@ -1127,7 +1177,7 @@ const Dashboard = () => {
                   <Box sx={{ display: 'flex', justifyContent: 'center', gap: 3 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <Box sx={{ width: 12, height: 12, bgcolor: 'primary.main', borderRadius: 1, mr: 1 }} />
-                      <Typography variant="caption">Practice Minutes</Typography>
+                      <Typography variant="caption" color="text.secondary">Practice Minutes</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center' }}>
                       <Box sx={{ 
@@ -1135,16 +1185,15 @@ const Dashboard = () => {
                         height: 12, 
                         bgcolor: 'success.main', 
                         borderRadius: '50%', 
-                        mr: 1,
-                        border: '1px solid white'
-                      }} />
-                      <Typography variant="caption">Completed Sessions</Typography>
+                        mr: 1 
+                      }}></Box>
+                      <Typography variant="caption" color="text.secondary">Completed Sessions</Typography>
                     </Box>
                   </Box>
                 </CardContent>
               </Card>
-        </Grid>
-      </Grid>
+            </Grid>
+          </Grid>
         )}
     </Container>
     </Box>
