@@ -1,7 +1,5 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import axios from 'axios';
-
-const API_URL = 'http://localhost:5000/api';
+import API from '../../api';
 
 // Helper function to check if the stored token is valid
 export const isTokenValid = () => {
@@ -38,7 +36,7 @@ export const register = createAsyncThunk(
   'auth/register',
   async ({ username, email, password }, { rejectWithValue }) => {
     try {
-      const response = await axios.post(`${API_URL}/auth/register`, {
+      const response = await API.post('/auth/register', {
         username,
         email,
         password,
@@ -60,7 +58,7 @@ export const login = createAsyncThunk(
   'auth/login',
   async ({ email, password }, { rejectWithValue }) => {
     try {
-      const response = await axios.post(`${API_URL}/auth/login`, {
+      const response = await API.post('/auth/login', {
         email,
         password,
       });
@@ -87,10 +85,10 @@ export const loadUser = createAsyncThunk(
           Authorization: `Bearer ${token}`,
         },
       };
-      const response = await axios.get(`${API_URL}/users/me`, config);
+      const response = await API.get('/users/me');
       return response.data;
     } catch (error) {
-      return rejectWithValue(error.response.data.message);
+      return rejectWithValue(error.response?.data?.message || 'Failed to load user');
     }
   }
 );
@@ -202,10 +200,9 @@ export const addXP = createAsyncThunk(
         },
       };
 
-      const response = await axios.post(
-        `${API_URL}/users/xp`, 
-        { xp: amount },
-        config
+      const response = await API.put(
+        '/users/xp', 
+        { xp: amount }
       );
 
       return { xpAdded: amount, userData: response.data.user };
@@ -233,10 +230,9 @@ export const addBadge = createAsyncThunk(
         },
       };
 
-      const response = await axios.post(
-        `${API_URL}/users/badge`, 
-        { badgeId },
-        config
+      const response = await API.post(
+        '/users/badges', 
+        { badgeId }
       );
 
       return { badgeId, badges: response.data.badges };
@@ -271,20 +267,18 @@ export const updateStreak = createAsyncThunk(
 
       console.log(`Sending streak update to server:`, payload);
       
-      const response = await axios.post(
-        `${API_URL}/users/streak`, 
-        payload,
-        config
+      const response = await API.put(
+        '/users/streak', 
+        payload
       );
 
       console.log(`Streak update response:`, response.data);
       
       // Also check for streak achievements
       try {
-        await axios.post(
-          `${API_URL}/achievements/check-streak`,
-          { streak: current },
-          config
+        await API.post(
+          '/achievements/check-streak',
+          { streak: current }
         );
       } catch (achievementError) {
         console.error('Error checking streak achievements:', achievementError);
@@ -312,10 +306,9 @@ export const updateProfile = createAsyncThunk(
         },
       };
       
-      const response = await axios.put(
-        `${API_URL}/users/me`, 
-        profileData,
-        config
+      const response = await API.put(
+        '/users/me', 
+        profileData
       );
       
       return response.data.user;
@@ -373,6 +366,9 @@ const authSlice = createSlice({
       state.user = initialState.user;
       state.loading = false;
       state.error = null;
+      // Audit fix C8: the persisted JWT used to survive logout, so the
+      // PrivateRoute silently re-authenticated on the next page load.
+      localStorage.removeItem('token');
       localStorage.removeItem('lastStreakUpdate');
     },
     updateUser: (state, action) => {
@@ -404,7 +400,9 @@ const authSlice = createSlice({
       .addCase(register.fulfilled, (state, action) => {
         state.loading = false;
         state.isAuthenticated = true;
-        state.user = action.payload.user;
+        // Audit fix C5: expose `id` alongside `_id` so components comparing
+        // msg.sender._id against user.id behave correctly.
+        state.user = { ...action.payload.user, id: action.payload.user._id };
       })
       .addCase(register.rejected, (state, action) => {
         state.loading = false;
@@ -417,7 +415,8 @@ const authSlice = createSlice({
       .addCase(login.fulfilled, (state, action) => {
         state.loading = false;
         state.isAuthenticated = true;
-        state.user = action.payload.user;
+        // Audit fix C5: normalize the id field (see register above)
+        state.user = { ...action.payload.user, id: action.payload.user._id };
       })
       .addCase(login.rejected, (state, action) => {
         state.loading = false;
@@ -430,7 +429,8 @@ const authSlice = createSlice({
       .addCase(loadUser.fulfilled, (state, action) => {
         state.loading = false;
         state.isAuthenticated = true;
-        state.user = action.payload;
+        // Audit fix C5: normalize the id field (see register above)
+        state.user = { ...action.payload, id: action.payload._id || action.payload.id };
       })
       .addCase(loadUser.rejected, (state, action) => {
         state.loading = false;
