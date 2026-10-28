@@ -337,6 +337,21 @@ const CircularTimer = ({
   const workerRef = useRef(null);
   const workerBlobURLRef = useRef(null);
   
+  // Audit fix C6: the worker's onmessage handler is installed once (empty-deps
+  // effect below), so it used to capture the FIRST render's onComplete /
+  // onTimeUpdate props forever. Parents pass fresh callbacks whose closures
+  // hold current task data, and the stale ones made auto-save fail. The refs
+  // below always point at the latest props.
+  const onCompleteRef = useRef(onComplete);
+  const onTimeUpdateRef = useRef(onTimeUpdate);
+  const remainingTimeRef = useRef(remainingTime);
+  
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+    onTimeUpdateRef.current = onTimeUpdate;
+    remainingTimeRef.current = remainingTime;
+  }, [onComplete, onTimeUpdate, remainingTime]);
+  
   const theme = useTheme();
   const isXs = useMediaQuery(theme.breakpoints.down('sm'));
   const isSm = useMediaQuery(theme.breakpoints.between('sm', 'md'));
@@ -387,22 +402,22 @@ const CircularTimer = ({
         setRemainingTime(0);
         setTimerCompleted(true);
         
-        // Notify parent
-        if (onComplete) {
-          onComplete();
+        // Notify parent through the latest-ref callbacks (audit fix C6)
+        if (onCompleteRef.current) {
+          onCompleteRef.current();
         }
         
-        if (onTimeUpdate) {
-          onTimeUpdate(0);
+        if (onTimeUpdateRef.current) {
+          onTimeUpdateRef.current(0);
         }
       } else {
-        // Only update if changed
-        if (secondsRemaining !== remainingTime) {
+        // Only update if changed (compare against the ref, not the captured state)
+        if (secondsRemaining !== remainingTimeRef.current) {
           setRemainingTime(secondsRemaining);
           
           // Notify parent about time update
-          if (onTimeUpdate) {
-            onTimeUpdate(secondsRemaining);
+          if (onTimeUpdateRef.current) {
+            onTimeUpdateRef.current(secondsRemaining);
           }
         }
       }

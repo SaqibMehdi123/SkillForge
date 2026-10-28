@@ -1,4 +1,5 @@
 // Jest setup for CRA test runs.
+import '@testing-library/jest-dom';
 
 // axios >=1.x ships ESM in its main entry which jest cannot transform inside
 // node_modules. Map ALL 'axios' imports (app code + tests) to the CJS build so
