@@ -1,6 +1,7 @@
 const PracticeSession = require('../models/PracticeSession');
 const User = require('../models/User');
 const Achievement = require('../models/Achievement');
+const { applyXp, rewardsForDuration, clampDuration, isValidDuration } = require('../services/xpService');
 const path = require('path');
 const fs = require('fs');
 
@@ -27,22 +28,29 @@ exports.completeSession = async (req, res, next) => {
     }
     session.completed = true;
     session.endedAt = new Date();
-    session.xpEarned = req.body.xpEarned || 10;
-    session.coinsEarned = req.body.coinsEarned || 1;
+    // Audit fix C9: rewards are computed from real elapsed time on the
+    // server - the client's xpEarned/coinsEarned values are ignored.
+    const elapsedMinutes = Math.max(
+      0,
+      (session.endedAt - (session.startedAt || session.createdAt)) / 60000
+    );
+    const { xpEarned, coinsEarned } = rewardsForDuration(elapsedMinutes);
+    session.xpEarned = xpEarned;
+    session.coinsEarned = coinsEarned;
     if (req.file) {
       session.photo = path.join('uploads', req.file.filename);
     }
     await session.save();
-    
-    // Update user XP/coins
+
+    // Update user XP/coins with the shared level-up rule
     const user = await User.findById(req.user);
-    user.xp += session.xpEarned;
-    user.coins += session.coinsEarned;
+    applyXp(user, session.xpEarned);
+    user.coins = (user.coins || 0) + session.coinsEarned;
     await user.save();
-    
+
     // Check and unlock first_steps achievement if this is their first completed session
     await checkAndUnlockFirstStepsAchievement(req.user);
-    
+
     res.json(session);
   } catch (err) {
     next(err);
@@ -86,18 +94,10 @@ async function checkAndUnlockFirstStepsAchievement(userId) {
         if (!user.badges.includes('first_steps')) {
           user.badges.push('first_steps');
         }
-        
-        // Award 100 XP
-        const xpReward = 100;
-        user.xp += xpReward;
-        
-        // Handle level up
-        while (user.xp >= user.level * 100) {
-          user.xp -= user.level * 100;
-          user.level += 1;
-          user.coins += 10;
-        }
-        
+
+        // Award 100 XP with the shared level-up rule (audit fix C9)
+        applyXp(user, 100);
+
         await user.save();
         console.log('First Steps achievement unlocked for user:', userId);
       }
@@ -196,39 +196,47 @@ exports.getPracticePhotos = async (req, res, next) => {
 // New method to save a practice session
 exports.saveSession = async (req, res, next) => {
   try {
-    const { skill, category, priority, duration, startedAt, endedAt, completed, xpEarned, coinsEarned, image } = req.body;
-    
-    console.log('Creating new practice session:', req.body);
-    
+    const { skill, category, priority, duration, startedAt, endedAt, completed, image } = req.body;
+
+    // Audit fix C9: validate the duration and clamp it, then compute the
+    // rewards server-side. Client-supplied xpEarned/coinsEarned are ignored.
+    if (!isValidDuration(duration)) {
+      return res.status(400).json({ message: 'A positive duration (in minutes) is required' });
+    }
+    const safeDuration = clampDuration(duration);
+    const { xpEarned, coinsEarned } = rewardsForDuration(safeDuration);
+
+    console.log('Creating new practice session:', { skill, safeDuration });
+
     // Create a new practice session
     const session = await PracticeSession.create({
       user: req.user,
       skill,
       category: category || 'general',
       priority: priority || 'medium',
-      duration,
+      duration: safeDuration,
       startedAt: new Date(startedAt),
       endedAt: new Date(endedAt),
       completed: completed || true,
-      xpEarned: xpEarned || Math.round(duration / 5),
-      coinsEarned: coinsEarned || Math.round(duration / 10),
+      xpEarned,
+      coinsEarned,
       notes: req.body.notes || '',
       photo: image ? `/uploads/photos/${image.split('/').pop()}` : null // Save the photo URL if available
     });
-    
-    console.log('Practice session created:', session);
-    
-    // Update user XP/coins
+
+    console.log('Practice session created:', session._id);
+
+    // Update user XP/coins with the shared level-up rule
     const user = await User.findById(req.user);
     if (user) {
-      user.xp = (user.xp || 0) + session.xpEarned;
-      user.coins = (user.coins || 0) + session.coinsEarned;
+      applyXp(user, xpEarned);
+      user.coins = (user.coins || 0) + coinsEarned;
       await user.save();
     }
-    
+
     // Check and unlock first_steps achievement
     await checkAndUnlockFirstStepsAchievement(req.user);
-    
+
     res.status(201).json({ 
       success: true, 
       session,

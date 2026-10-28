@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const { applyXp } = require('../services/xpService');
 const path = require('path');
 const fs = require('fs');
 
@@ -137,15 +138,8 @@ exports.updateXP = async (req, res, next) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Add XP
-    user.xp += parseInt(xp, 10);
-    
-    // Handle level up (every 100 * level XP)
-    while (user.xp >= user.level * 100) {
-      user.xp -= user.level * 100;
-      user.level += 1;
-      user.coins += 10; // Bonus coins on level up
-    }
+    // Add XP with the shared level-up rule (audit fix C9)
+    applyXp(user, parseInt(xp, 10));
 
     await user.save();
     
