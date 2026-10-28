@@ -45,6 +45,9 @@ router.post('/avatar', auth, upload.single('avatar'), userController.uploadAvata
 router.get('/users/:id', auth, userController.getUserById);
 router.post('/friends', auth, userController.addFriend);
 router.get('/users', auth, userController.getAllUsers);
+// Audit fix C3: the Find Users page calls GET /api/users - serve it at the
+// collection root as well as the legacy /users alias.
+router.get('/', auth, userController.getAllUsers);
 router.put('/xp', auth, userController.updateXP);
 router.put('/streak', auth, userController.updateStreak);
 router.post('/badges', auth, userController.addBadge);
