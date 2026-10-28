@@ -1,9 +1,6 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import API from '../../api';
-import axios from 'axios';
 import { updateUserStreak } from '../auth/authSlice';
-
-const API_URL = 'http://localhost:5000/api';
 
 // Async thunks for backend integration
 export const startSession = createAsyncThunk(
@@ -39,21 +36,18 @@ export const savePracticeSession = createAsyncThunk(
   'practice/savePracticeSession',
   async (taskData, { rejectWithValue, dispatch }) => {
     try {
-      const token = localStorage.getItem('token');
-      const config = {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      };
-
       const { name, label, category, priority, duration, startTime, image } = taskData;
       
       // Calculate actual duration and end time
       const endTime = new Date();
-      const actualDurationMinutes = duration / 60; // Convert seconds to minutes
+      // Audit fix (duration unit chain): task.duration is ALREADY in minutes
+      // (AddTaskModal emits minutes and startTask multiplies by 60 for the
+      // timer). The old code divided by 60 again, storing a 30-minute session
+      // as 0.5 minutes and rendering it as 0 minutes everywhere.
+      const actualDurationMinutes = Math.max(1, Math.round(Number(duration) || 0));
       
-      // Create the session data
+      // Create the session data (server recomputes XP/coins; these mirror the
+      // published formula)
       const sessionData = {
         skill: label || name,
         category,
@@ -70,11 +64,7 @@ export const savePracticeSession = createAsyncThunk(
       // Log the data being sent
       console.log('Saving practice session:', sessionData);
       
-      const response = await axios.post(
-        `${API_URL}/practice/sessions`, 
-        sessionData,
-        config
-      );
+      const response = await API.post('/practice/sessions', sessionData);
       
       console.log('Practice session saved:', response.data);
       
@@ -473,8 +463,18 @@ const practiceSlice = createSlice({
         // Make sure we handle cases where the backend returns empty arrays or non-array data
         if (Array.isArray(action.payload)) {
           state.loading = false;
-          state.tasks = action.payload.filter((s) => !s.completed);
-          state.completedTasks = action.payload.filter((s) => s.completed);
+          const serverTasks = action.payload.filter((s) => !s.completed);
+          const serverCompleted = action.payload.filter((s) => s.completed);
+          // Audit fix (getHistory wipe): tasks that exist only locally (numeric
+          // id, no _id - i.e. created in this browser but not yet saved to the
+          // server) used to be deleted by this handler. Keep them.
+          const localOnlyTasks = state.tasks.filter(
+            (t) => t.id !== undefined && t.id !== null && !t._id &&
+              !serverTasks.some((s) => String(s.id) === String(t.id))
+          );
+          const localOnlyCompleted = state.completedTasks.filter((t) => !t._id);
+          state.tasks = [...localOnlyTasks, ...serverTasks];
+          state.completedTasks = [...localOnlyCompleted, ...serverCompleted];
           // Sort completed tasks by date, most recent first
           state.completedTasks.sort((a, b) => {
             const dateA = new Date(a.endedAt || a.completedAt || a.updatedAt || a.createdAt);
@@ -484,9 +484,9 @@ const practiceSlice = createSlice({
         } else {
           console.error('Practice history data is not an array:', action.payload);
           state.loading = false;
-          // Set default empty arrays to avoid breaking the app
-          state.tasks = [];
-          state.completedTasks = [];
+          // Keep whatever the user had locally instead of dropping it
+          state.tasks = state.tasks.filter((t) => !t._id);
+          state.completedTasks = state.completedTasks.filter((t) => !t._id);
         }
       })
       .addCase(saveTaskPhoto.pending, (state) => {
