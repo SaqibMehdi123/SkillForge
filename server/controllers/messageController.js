@@ -110,8 +110,8 @@ exports.getConversations = async (req, res, next) => {
       {
         $match: {
           $or: [
-            { sender: mongoose.Types.ObjectId(userId) },
-            { recipient: mongoose.Types.ObjectId(userId) }
+            { sender: new mongoose.Types.ObjectId(userId) },
+            { recipient: new mongoose.Types.ObjectId(userId) }
           ]
         }
       },
@@ -122,7 +122,7 @@ exports.getConversations = async (req, res, next) => {
         $group: {
           _id: {
             $cond: {
-              if: { $eq: ["$sender", mongoose.Types.ObjectId(userId)] },
+              if: { $eq: ["$sender", new mongoose.Types.ObjectId(userId)] },
               then: "$recipient",
               else: "$sender"
             }
@@ -132,7 +132,7 @@ exports.getConversations = async (req, res, next) => {
             $sum: {
               $cond: [
                 { $and: [
-                  { $eq: ["$recipient", mongoose.Types.ObjectId(userId)] },
+                  { $eq: ["$recipient", new mongoose.Types.ObjectId(userId)] },
                   { $eq: ["$read", false] }
                 ]},
                 1,

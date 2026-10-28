@@ -13,7 +13,11 @@ const messageSchema = new mongoose.Schema({
   },
   content: { 
     type: String,
-    required: true 
+    // An image-only message has no text - only require content when there is no image.
+    required: function () {
+      return !this.image;
+    },
+    default: '',
   },
   image: { 
     type: String 

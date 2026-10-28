@@ -31,7 +31,7 @@ exports.uploadPhoto = async (req, res, next) => {
     
     // Create Media document in MongoDB
     const mediaData = {
-      user: mongoose.Types.ObjectId(userId),
+      user: new mongoose.Types.ObjectId(userId),
       url: photo.path,
       type: 'photo',
       metadata: {
@@ -44,7 +44,7 @@ exports.uploadPhoto = async (req, res, next) => {
     
     // If sessionId is provided, link this media to the practice session
     if (sessionId) {
-      mediaData.session = mongoose.Types.ObjectId(sessionId);
+      mediaData.session = new mongoose.Types.ObjectId(sessionId);
     }
     
     // Save to Media collection
@@ -53,10 +53,12 @@ exports.uploadPhoto = async (req, res, next) => {
     
     console.log('Media saved to database:', media._id);
     
-    // Add full URLs to the photo object for the response
+    // Add full URLs to the photo object for the response (derived from the
+    // incoming request instead of a hard-coded localhost URL)
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
     const responsePhoto = {
       ...photo,
-      fullPath: `http://localhost:5000${photo.path}`,
+      fullPath: `${baseUrl}${photo.path}`,
       mediaId: media._id
     };
     
