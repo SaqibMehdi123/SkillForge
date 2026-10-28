@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import API from '../../api';
 import { updateUserStreak } from '../auth/authSlice';
+import { SERVER_URL } from '../../config';
 
 // Async thunks for backend integration
 export const startSession = createAsyncThunk(
@@ -216,7 +217,7 @@ export const getUserPracticePhotos = createAsyncThunk(
         const practicePhotos = response.data.data.map(photo => ({
           ...photo,
           url: photo.url && !photo.url.startsWith('http') ? 
-            `http://localhost:5000${photo.url}` : photo.url,
+            `${SERVER_URL}${photo.url}` : photo.url,
           source: 'practice'
         }));
         combinedPhotos = [...combinedPhotos, ...practicePhotos];
@@ -227,7 +228,7 @@ export const getUserPracticePhotos = createAsyncThunk(
         const generalPhotos = generalPhotosResponse.data.photos.map(photo => ({
           ...photo,
           url: photo.path && !photo.path.startsWith('http') ? 
-            `http://localhost:5000${photo.path}` : photo.path || photo.url,
+            `${SERVER_URL}${photo.path}` : photo.path || photo.url,
           source: 'general'
         }));
         combinedPhotos = [...combinedPhotos, ...generalPhotos];
@@ -243,7 +244,7 @@ export const getUserPracticePhotos = createAsyncThunk(
           if (mockResponse.data && mockResponse.data.images) {
             const mockPhotos = mockResponse.data.images.map((path, index) => ({
               id: `mock-${index}`,
-              url: `http://localhost:5000${path}`,
+              url: `${SERVER_URL}${path}`,
               date: new Date().toISOString(),
               source: 'mock'
             }));

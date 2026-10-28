@@ -57,6 +57,7 @@ import { updateUserStreak } from '../../features/auth/authSlice';
 import { getFriends } from '../../features/friends/friendsSlice';
 import { getUserPracticePhotos } from '../../features/practice/practiceSlice';
 import { format } from 'date-fns';
+import { SERVER_URL } from '../../config';
 
 const Messages = () => {
   const { userId } = useParams();
@@ -212,7 +213,7 @@ const Messages = () => {
     
     // Make sure the URL is properly formatted with the server prefix
     if (photoUrl && !photoUrl.startsWith('http')) {
-      photoUrl = `http://localhost:5000${photoUrl}`;
+      photoUrl = `${SERVER_URL}${photoUrl}`;
     }
     
     console.log('Using photo URL:', photoUrl);

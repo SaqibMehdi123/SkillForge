@@ -61,6 +61,7 @@ import {
 } from '../../features/practice/practiceSlice';
 import { updateUserStreak } from '../../features/auth/authSlice';
 import { setNavbarTitle } from '../../features/ui/uiSlice';
+import { SERVER_URL } from '../../config';
 
 function getCurrentWeek() {
   const today = new Date();
@@ -403,7 +404,7 @@ const PracticeSession = () => {
     const serverPhotosList = serverPhotos.map(photo => ({
       id: photo.id,
       userId: photo.userId,
-      image: `http://localhost:5000${photo.path}`,
+      image: `${SERVER_URL}${photo.path}`,
       taskName: photo.taskName || 'Task',
       taskCategory: photo.taskCategory || 'general',
       taskPriority: photo.taskPriority || 'medium',
@@ -424,7 +425,7 @@ const PracticeSession = () => {
       .map(photo => ({
         id: photo.id || photo._id,
         userId: photo.userId || user.id,
-        image: photo.url || (photo.path ? `http://localhost:5000${photo.path}` : photo.image),
+        image: photo.url || (photo.path ? `${SERVER_URL}${photo.path}` : photo.image),
         taskName: photo.skillName || photo.taskName || 'Practice Task',
         taskCategory: photo.category || 'practice',
         taskPriority: photo.priority || 'medium',

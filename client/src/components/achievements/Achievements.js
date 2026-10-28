@@ -32,7 +32,7 @@ import {
 import { addBadge, addXP } from '../../features/auth/authSlice';
 
 // API URL for backend requests
-const API_URL = 'http://localhost:5000/api';
+import { API_URL } from '../../config';
 
 // The achievements array with streak-related achievements
 const achievementsList = [
