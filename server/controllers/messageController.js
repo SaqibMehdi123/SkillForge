@@ -107,6 +107,13 @@ exports.getConversation = async (req, res, next) => {
       return res.status(403).json({ message: 'You can only view conversations with your friends' });
     }
 
+    // Audit fix B13: mark as read BEFORE fetching, otherwise the response
+    // carries stale read:false flags for the very messages being marked.
+    await Message.updateMany(
+      { sender: userId, recipient: currentUserId, read: false },
+      { read: true }
+    );
+
     // Get all messages between the two users
     // Use strict filtering to ensure only messages directly between these two users are returned
     const messages = await Message.find({
@@ -119,12 +126,6 @@ exports.getConversation = async (req, res, next) => {
     })
     .sort({ createdAt: 1 })
     .populate('sender', 'username avatar');
-
-    // Mark messages as read
-    await Message.updateMany(
-      { sender: userId, recipient: currentUserId, read: false },
-      { read: true }
-    );
 
     res.status(200).json({ data: messages });
   } catch (err) {
