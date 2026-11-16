@@ -33,7 +33,8 @@ exports.deleteMedia = async (req, res, next) => {
     if (!media || media.user.toString() !== req.user) {
       return res.status(404).json({ message: 'Media not found' });
     }
-    await media.remove();
+    // Mongoose 8 removed Document.prototype.remove - use deleteOne instead.
+    await Media.deleteOne({ _id: media._id });
     res.json({ message: 'Media deleted' });
   } catch (err) {
     next(err);

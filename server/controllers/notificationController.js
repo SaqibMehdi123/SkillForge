@@ -29,7 +29,8 @@ exports.deleteNotification = async (req, res, next) => {
     if (!notification || notification.user.toString() !== req.user) {
       return res.status(404).json({ message: 'Notification not found' });
     }
-    await notification.remove();
+    // Mongoose 8 removed Document.prototype.remove - use deleteOne instead.
+    await Notification.deleteOne({ _id: notification._id });
     res.json({ message: 'Notification deleted' });
   } catch (err) {
     next(err);
