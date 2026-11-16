@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { useSelector } from 'react-redux';
-import axios from 'axios';
+import React, { useState, useEffect, useRef } from 'react';
+import { useSelector, useDispatch } from 'react-redux';
+import { updateUser } from '../../features/auth/authSlice';
+import API from '../../api';
 import { Container, Grid, Paper, Typography, Box, Card, CardContent, LinearProgress, Chip, Avatar, Tooltip, useTheme, Badge, CircularProgress,  } from '@mui/material';
 import {
   EmojiEvents as TrophyIcon,
@@ -16,7 +17,6 @@ import {
 
 
 // API URL for backend requests
-import { API_URL } from '../../config';
 
 // The achievements array with streak-related achievements
 const achievementsList = [
@@ -214,7 +214,9 @@ const achievementsList = [
 
 const Achievements = () => {
   const theme = useTheme();
+  const dispatch = useDispatch();
   const { user = {} } = useSelector((state) => state.auth);
+  
   const { completedTasks = [], photos = [] } = useSelector((state) => state.practice) || { completedTasks: [], photos: [] };
   const [earnedAchievements, setEarnedAchievements] = useState([]);
   const [recentAchievements, setRecentAchievements] = useState([]);
@@ -228,24 +230,34 @@ const Achievements = () => {
     0
   ) : 0;
 
+  // Audit fix F18: refs that keep the earn-check re-entrant-safe. The old
+  // effect depended on earnedAchievements AND called setEarnedAchievements
+  // inside a sequential await loop - every set re-triggered the effect while
+  // the loop was still running, producing concurrent re-checks and DUPLICATE
+  // POST /achievements calls for the same badge.
+  const earnedRef = useRef(earnedAchievements);
+  const checkingRef = useRef(false);
+
+  // dispatchUpdateUser ref for the F20 sync inside the async loop
+  const dispatchUpdateUserRef = useRef(null);
+  useEffect(() => {
+    dispatchUpdateUserRef.current = (patch) => dispatch(updateUser(patch));
+  }, [dispatch]);
+
+  // Keep the earn-check's view of unlocked badges in sync (F18: the effect
+  // reads earnedRef instead of the state to avoid re-entrant triggers)
+  useEffect(() => {
+    earnedRef.current = earnedAchievements;
+  }, [earnedAchievements]);
+
   // Fetch achievements from the server
   useEffect(() => {
     const fetchAchievements = async () => {
       try {
         setLoading(true);
-        const token = localStorage.getItem('token');
-        
-        if (!token) {
-          throw new Error('No authentication token found');
-        }
-        
-        const config = {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        };
-        
-        const response = await axios.get(`${API_URL}/achievements/me`, config);
+        // Audit fix F29/F33: use the shared API instance - the interceptor
+        // supplies the token; no hand-rolled header configs.
+        const response = await API.get('/achievements/me');
         
         // Map server achievements to our format
         const serverAchievements = response.data.map(achievement => ({
@@ -288,8 +300,21 @@ const Achievements = () => {
   }, []);
 
   // Check for new achievements when user stats change
+  // Audit fix F18: a checkingRef guard makes this effect idempotent - only
+  // one check runs at a time and completed unlocks update earnedRef, so
+  // re-runs never re-POST the same badge.
   useEffect(() => {
     const checkForNewAchievements = async () => {
+      if (checkingRef.current) return;
+      checkingRef.current = true;
+      try {
+        return await checkForNewAchievementsInner();
+      } finally {
+        checkingRef.current = false;
+      }
+    };
+    
+    const checkForNewAchievementsInner = async () => {
       try {
         // Skip achievement checks if still loading existing achievements
         if (loading) return;
@@ -308,8 +333,8 @@ const Achievements = () => {
         const newlyEarnedAchievements = [];
         
         achievementsList.forEach(achievement => {
-          // Skip if already earned
-          if (earnedAchievements.some(earned => earned.id === achievement.id)) {
+          // Skip if already earned (read via ref - see F18 note above)
+          if (earnedRef.current.some(earned => earned.id === achievement.id)) {
             return;
           }
           
@@ -342,25 +367,13 @@ const Achievements = () => {
         
         // If there are newly earned achievements, save them to the server
         if (newlyEarnedAchievements.length > 0) {
-          const token = localStorage.getItem('token');
-          if (!token) {
-            throw new Error('No authentication token found');
-          }
-          
-          const config = {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          };
-          
-          // Save each achievement to the server
+          // Save each achievement to the server (F29/F33: shared API instance)
           for (const achievement of newlyEarnedAchievements) {
             try {
               // Audit fix S3 companion: xpReward is IGNORED server-side now -
               // rewards come from the server catalog keyed by badgeId.
-              await axios.post(
-                `${API_URL}/achievements`,
+              const postResponse = await API.post(
+                '/achievements',
                 {
                   type: achievement.type,
                   name: achievement.title,
@@ -368,9 +381,21 @@ const Achievements = () => {
                   icon: achievement.type,
                   badgeId: achievement.id,
                   xpReward: achievement.xp
-                },
-                config
+                }
               );
+              
+              // Audit fix F20: the server computes and stores the XP/level/
+              // badges - sync them into the auth store so the Navbar XP bar
+              // and level card reflect the unlock immediately (no reload).
+              const serverUser = postResponse.data && postResponse.data.user;
+              if (serverUser && dispatchUpdateUserRef.current) {
+                dispatchUpdateUserRef.current({
+                  xp: serverUser.xp,
+                  level: serverUser.level,
+                  coins: serverUser.coins,
+                  badges: serverUser.badges,
+                });
+              }
               
               // Add the newly earned achievement to the state
               const newAchievement = {
@@ -394,7 +419,8 @@ const Achievements = () => {
     };
     
     checkForNewAchievements();
-  }, [user, completedTasks.length, photos.length, totalPracticeMinutes, loading, earnedAchievements]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, completedTasks.length, photos.length, totalPracticeMinutes, loading]);
 
   // Get progress for an achievement
   const getAchievementProgress = (achievement) => {

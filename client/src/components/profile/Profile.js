@@ -198,7 +198,7 @@ const Profile = () => {
       const config = {
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data',
+          // F16: axios sets the multipart boundary itself for FormData.
         },
       };
 

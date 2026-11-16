@@ -51,7 +51,7 @@ export const getFriends = createAsyncThunk(
       const response = await axios.get(`${API_URL}/friends`, config);
       return response.data.data;
     } catch (error) {
-      return rejectWithValue(error.response.data.message);
+      return rejectWithValue(error.response?.data?.message || 'Failed to load friends. Please try again.');
     }
   }
 );
@@ -70,7 +70,7 @@ export const getPendingRequests = createAsyncThunk(
       const response = await axios.get(`${API_URL}/friends/requests/pending`, config);
       return response.data.data;
     } catch (error) {
-      return rejectWithValue(error.response.data.message);
+      return rejectWithValue(error.response?.data?.message || 'Failed to load friend requests. Please try again.');
     }
   }
 );
@@ -89,7 +89,7 @@ export const getSentRequests = createAsyncThunk(
       const response = await axios.get(`${API_URL}/friends/requests/sent`, config);
       return response.data.data;
     } catch (error) {
-      return rejectWithValue(error.response.data.message);
+      return rejectWithValue(error.response?.data?.message || 'Failed to load sent requests. Please try again.');
     }
   }
 );
@@ -108,7 +108,7 @@ export const sendFriendRequest = createAsyncThunk(
       const response = await axios.post(`${API_URL}/friends/requests`, { recipientId }, config);
       return { ...response.data.data, recipientId };
     } catch (error) {
-      return rejectWithValue(error.response.data.message);
+      return rejectWithValue(error.response?.data?.message || 'Failed to send the friend request. Please try again.');
     }
   }
 );
@@ -127,7 +127,7 @@ export const acceptFriendRequest = createAsyncThunk(
       await axios.put(`${API_URL}/friends/requests/${requestId}/accept`, {}, config);
       return requestId;
     } catch (error) {
-      return rejectWithValue(error.response.data.message);
+      return rejectWithValue(error.response?.data?.message || 'Failed to accept the friend request. Please try again.');
     }
   }
 );
@@ -146,7 +146,7 @@ export const rejectFriendRequest = createAsyncThunk(
       await axios.put(`${API_URL}/friends/requests/${requestId}/reject`, {}, config);
       return requestId;
     } catch (error) {
-      return rejectWithValue(error.response.data.message);
+      return rejectWithValue(error.response?.data?.message || 'Failed to reject the friend request. Please try again.');
     }
   }
 );
@@ -165,7 +165,7 @@ export const removeFriend = createAsyncThunk(
       await axios.delete(`${API_URL}/friends/${friendId}`, config);
       return friendId;
     } catch (error) {
-      return rejectWithValue(error.response.data.message);
+      return rejectWithValue(error.response?.data?.message || 'Failed to remove the friend. Please try again.');
     }
   }
 );

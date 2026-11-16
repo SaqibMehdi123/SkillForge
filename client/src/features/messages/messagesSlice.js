@@ -2,6 +2,7 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
 
 import { API_URL } from '../../config';
+import API from '../../api';
 
 // Get all conversations
 export const getConversations = createAsyncThunk(
@@ -92,15 +93,10 @@ export const sendMessage = createAsyncThunk(
   'messages/sendMessage',
   async ({ recipientId, recipientName, content, image, practicePhotoUrl }, { rejectWithValue, getState }) => {
     try {
-      const token = localStorage.getItem('token');
-      const config = {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data',
-        },
-      };
-      
-      // Create form data for potential image upload
+      // Audit fix F16/F33: go through the shared API instance (token comes
+      // from the interceptor) and let axios set the multipart boundary itself
+      // for FormData - the manual 'Content-Type: multipart/form-data' header
+      // omitted the boundary and could 400 depending on the adapter.
       const formData = new FormData();
       formData.append('recipientId', recipientId);
       
@@ -116,7 +112,7 @@ export const sendMessage = createAsyncThunk(
         formData.append('practicePhotoUrl', practicePhotoUrl);
       }
       
-      const response = await axios.post(`${API_URL}/messages`, formData, config);
+      const response = await API.post('/messages', formData);
       
       // Get current user details for better message display
       const { user } = getState().auth;
@@ -146,7 +142,8 @@ export const uploadMessageImage = createAsyncThunk(
       const config = {
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data',
+          // F16: never pin multipart Content-Type manually - axios adds the
+          // boundary itself when the body is FormData.
         },
       };
       
@@ -156,7 +153,7 @@ export const uploadMessageImage = createAsyncThunk(
       const response = await axios.post(`${API_URL}/messages/upload-image`, formData, config);
       return response.data.imageUrl;
     } catch (error) {
-      return rejectWithValue(error.response.data.message);
+      return rejectWithValue(error.response?.data?.message || 'Message request failed. Please try again.');
     }
   }
 );
