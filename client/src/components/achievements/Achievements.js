@@ -1,23 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useSelector, useDispatch } from 'react-redux';
+import { useSelector } from 'react-redux';
 import axios from 'axios';
-import {
-  Container,
-  Grid,
-  Paper,
-  Typography,
-  Box,
-  Card,
-  CardContent,
-  LinearProgress,
-  Chip,
-  Divider,
-  Avatar,
-  Tooltip,
-  useTheme,
-  Badge,
-  CircularProgress,
-} from '@mui/material';
+import { Container, Grid, Paper, Typography, Box, Card, CardContent, LinearProgress, Chip, Avatar, Tooltip, useTheme, Badge, CircularProgress,  } from '@mui/material';
 import {
   EmojiEvents as TrophyIcon,
   Star as StarIcon,
@@ -29,7 +13,7 @@ import {
   WorkspacePremium as PremiumIcon,
   Lock as LockIcon,
 } from '@mui/icons-material';
-import { addBadge, addXP } from '../../features/auth/authSlice';
+
 
 // API URL for backend requests
 import { API_URL } from '../../config';
@@ -229,7 +213,6 @@ const achievementsList = [
 ];
 
 const Achievements = () => {
-  const dispatch = useDispatch();
   const theme = useTheme();
   const { user = {} } = useSelector((state) => state.auth);
   const { completedTasks = [], photos = [] } = useSelector((state) => state.practice) || { completedTasks: [], photos: [] };
@@ -374,7 +357,9 @@ const Achievements = () => {
           // Save each achievement to the server
           for (const achievement of newlyEarnedAchievements) {
             try {
-              const response = await axios.post(
+              // Audit fix S3 companion: xpReward is IGNORED server-side now -
+              // rewards come from the server catalog keyed by badgeId.
+              await axios.post(
                 `${API_URL}/achievements`,
                 {
                   type: achievement.type,

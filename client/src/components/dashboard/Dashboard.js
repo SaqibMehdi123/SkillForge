@@ -1,47 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import {
-  Container,
-  Grid,
-  Paper,
-  Typography,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  CardActions,
-  useTheme,
-  useMediaQuery,
-  Divider,
-  Avatar,
-  LinearProgress,
-  IconButton,
-  Stack,
-  Chip,
-  Tabs,
-  Tab,
-  CircularProgress,
-} from '@mui/material';
+import { Container, Grid, Paper, Typography, Box, Button, Card, CardContent, useTheme, useMediaQuery, Divider, Avatar, LinearProgress, Stack, Chip, Tabs, Tab, CircularProgress,  } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import {
   Timer as TimerIcon,
-  Camera as CameraIcon,
-  BarChart as BarChartIcon,
-  Group as GroupIcon,
   ArrowForward as ArrowForwardIcon,
   AccessTime as AccessTimeIcon,
   TrendingUp as TrendingUpIcon,
   LocalFireDepartment as FireIcon,
   WorkspacePremium as AchievementIcon,
-  EmojiEvents as TrophyIcon,
-  Celebration as CelebrationIcon,
-  Star as StarIcon,
   Image as ImageIcon,
   InsertChart as InsertChartIcon,
-  StackedLineChart as StackedLineChartIcon,
-  CalendarMonth as CalendarIcon,
-  Speed as SpeedIcon,
-  DirectionsRun as ActivityIcon
+  CalendarMonth as CalendarIcon
 } from '@mui/icons-material';
 import { getHistory } from '../../features/practice/practiceSlice';
 
@@ -58,7 +28,7 @@ const Dashboard = () => {
   const [liveTime, setLiveTime] = useState(currentTask?.remaining || 0);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+
   const [activeTab, setActiveTab] = useState(0);
 
   // Fetch practice session history when component mounts
@@ -158,11 +128,6 @@ const Dashboard = () => {
 
   const streakExpiry = getStreakExpiryInfo();
 
-  // Calculate date-based metrics
-  const daysActive = completedTasks.length > 0 
-    ? new Set(completedTasks.map(task => new Date(task.endedAt || task.completedAt).toDateString())).size 
-    : 0;
-    
   // Calculate completion rate based on completed vs total sessions
   const completionRate = completedTasks.length > 0 || tasks.length > 0
     ? Math.round((completedTasks.length / (completedTasks.length + tasks.length)) * 100) 

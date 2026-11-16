@@ -411,7 +411,7 @@ const CircularTimer = ({
     
     // Set up message handler
     workerRef.current.onmessage = (e) => {
-      const { type, secondsRemaining, completed } = e.data;
+      const { secondsRemaining, completed } = e.data;
       
       if (completed) {
         setRemainingTime(0);

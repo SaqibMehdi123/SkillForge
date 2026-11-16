@@ -1,46 +1,8 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useLocation } from 'react-router-dom';
-import { 
-  Box, 
-  Container, 
-  Grid, 
-  IconButton, 
-  Typography, 
-  Button, 
-  LinearProgress, 
-  Stack,
-  Dialog,
-  DialogContent,
-  DialogActions,
-  DialogTitle,
-  ImageList,
-  ImageListItem,
-  Divider,
-  Paper,
-  useTheme,
-  useMediaQuery,
-  Card,
-  CardContent,
-  Fab,
-  Tabs,
-  Tab,
-  Chip,
-  Badge,
-  Tooltip
-} from '@mui/material';
-import { 
-  CalendarToday, 
-  Assignment, 
-  Photo, 
-  FileUpload, 
-  Add as AddIcon,
-  AccessTime,
-  ArrowUpward,
-  ArrowDownward,
-  Dashboard,
-  History 
-} from '@mui/icons-material';
+import { Box, Container, Grid, Typography, Button, LinearProgress, Stack, Dialog, DialogContent, DialogActions, DialogTitle, ImageList, ImageListItem, Divider, Paper, useTheme, useMediaQuery, Card, CardContent, Fab, Tabs, Tab, Chip, Tooltip } from '@mui/material';
+import { CalendarToday, Assignment, Photo, Add as AddIcon, AccessTime, ArrowUpward, ArrowDownward, Dashboard, History } from '@mui/icons-material';
 import CircularTimer from './CircularTimer';
 import AddTaskModal from './AddTaskModal';
 import Webcam from 'react-webcam';
@@ -59,8 +21,8 @@ import {
   getUserPracticePhotos,
   getHistory
 } from '../../features/practice/practiceSlice';
-import { updateUserStreak } from '../../features/auth/authSlice';
-import { setNavbarTitle } from '../../features/ui/uiSlice';
+
+
 import { SERVER_URL } from '../../config';
 
 function getCurrentWeek() {
@@ -90,7 +52,6 @@ const PracticeSession = () => {
   const [cameraOpen, setCameraOpen] = useState(false);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [capturedPhotos, setCapturedPhotos] = useState([]);
-  const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadedImage, setUploadedImage] = useState(null);
   const [uploadConfirmOpen, setUploadConfirmOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);

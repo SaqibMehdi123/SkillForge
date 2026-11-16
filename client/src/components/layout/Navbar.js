@@ -1,30 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
-import {
-  AppBar,
-  Box,
-  Toolbar,
-  IconButton,
-  Typography,
-  Menu,
-  Container,
-  Avatar,
-  Button,
-  MenuItem,
-  LinearProgress,
-  Chip,
-  Paper,
-  Divider,
-  Tooltip,
-  Drawer,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  useMediaQuery,
-  useTheme,
-} from '@mui/material';
+import { AppBar, Box, Toolbar, IconButton, Typography, Menu, Container, Avatar, Button, MenuItem, LinearProgress, Chip, Divider, Tooltip, Drawer, List, ListItem, ListItemIcon, ListItemText, useMediaQuery, useTheme,  } from '@mui/material';
 import {
   Dashboard as DashboardIcon,
   Person as PersonIcon,
@@ -33,15 +10,12 @@ import {
   Timer as TimerIcon,
   LightMode as LightModeIcon,
   DarkMode as DarkModeIcon,
-  MonetizationOn as CoinIcon,
   Star as LevelIcon,
-  Notifications as NotificationsIcon,
-  Settings as SettingsIcon,
   Refresh as RefreshIcon,
   Menu as MenuIcon,
   Whatshot as WhatshotIcon,
 } from '@mui/icons-material';
-import { logout, loadUser } from '../../features/auth/authSlice';
+import { logout } from '../../features/auth/authSlice';
 import { toggleTheme } from '../../features/theme/themeSlice';
 import NotificationBadge from '../common/NotificationBadge';
 
@@ -62,12 +36,9 @@ const Navbar = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-  // Load user data on component mount if token exists
-  useEffect(() => {
-    if (localStorage.getItem('token')) {
-      dispatch(loadUser());
-    }
-  }, [dispatch]);
+  // Audit fix F11: this component used to dispatch its own loadUser on
+  // mount - App.js already does it, so every page load fired TWO identical
+  // GET /users/me calls. App is the single owner now.
 
   const handleMenu = (event) => {
     setAnchorEl(event.currentTarget);

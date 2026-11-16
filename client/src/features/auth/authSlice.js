@@ -79,16 +79,15 @@ export const loadUser = createAsyncThunk(
   'auth/loadUser',
   async (_, { rejectWithValue }) => {
     try {
-      const token = localStorage.getItem('token');
-      const config = {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      };
       const response = await API.get('/users/me');
       return response.data;
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || 'Failed to load user');
+      // Audit fix F11: include the status so the rejected handler can evict
+      // a dead token (401) instead of retrying it on every boot.
+      return rejectWithValue({
+        message: error.response?.data?.message || 'Failed to load user',
+        status: error.response?.status,
+      });
     }
   }
 );
@@ -193,12 +192,6 @@ export const addXP = createAsyncThunk(
         throw new Error('Authentication token not found');
       }
 
-      const config = {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      };
 
       const response = await API.put(
         '/users/xp', 
@@ -223,12 +216,6 @@ export const addBadge = createAsyncThunk(
         throw new Error('Authentication token not found');
       }
 
-      const config = {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      };
 
       const response = await API.post(
         '/users/badges', 
@@ -255,12 +242,6 @@ export const updateStreak = createAsyncThunk(
         throw new Error('Authentication token not found');
       }
 
-      const config = {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      };
 
       const payload = { streak: current };
       if (best) payload.bestStreak = best;
@@ -298,13 +279,7 @@ export const updateProfile = createAsyncThunk(
   'auth/updateProfile',
   async (profileData, { rejectWithValue }) => {
     try {
-      const token = localStorage.getItem('token');
-      const config = {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      };
+
       
       const response = await API.put(
         '/users/me', 
@@ -440,7 +415,17 @@ const authSlice = createSlice({
       })
       .addCase(loadUser.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload;
+        // F11: a 401 means the persisted token is dead - evict it so the
+        // next boot stops hammering /users/me and the user sees login.
+        const payload = action.payload;
+        if (payload && typeof payload === 'object' && payload.status === 401) {
+          localStorage.removeItem('token');
+          state.error = payload.message || 'Session expired';
+        } else if (typeof payload === 'string') {
+          state.error = payload;
+        } else {
+          state.error = payload?.message || 'Failed to load user';
+        }
       })
       // Update Streak
       .addCase(updateUserStreak.fulfilled, (state, action) => {

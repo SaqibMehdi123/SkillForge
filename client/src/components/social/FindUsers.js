@@ -1,24 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import {
-  Container,
-  Paper,
-  Typography,
-  Box,
-  TextField,
-  Button,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
-  ListItemSecondaryAction,
-  Avatar,
-  IconButton,
-  Divider,
-  Alert,
-  CircularProgress,
-  InputAdornment,
-} from '@mui/material';
+import { Container, Paper, Typography, Box, TextField, Button, List, ListItem, ListItemAvatar, ListItemText, ListItemSecondaryAction, Avatar, Divider, Alert, CircularProgress, InputAdornment,  } from '@mui/material';
 import {
   PersonAdd as PersonAddIcon,
   Search as SearchIcon,
@@ -37,6 +19,7 @@ const FindUsers = () => {
 
   useEffect(() => {
     fetchUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispatch]);
 
   useEffect(() => {
@@ -45,6 +28,7 @@ const FindUsers = () => {
     } else {
       setSearchResults([]);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allUsers, searchTerm, friends, sentRequests, pendingRequests, pendingUsers]);
 
   const fetchUsers = () => {

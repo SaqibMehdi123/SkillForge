@@ -1,50 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-import {
-  Container,
-  Paper,
-  Typography,
-  Box,
-  Tabs,
-  Tab,
-  TextField,
-  Button,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
-  ListItemSecondaryAction,
-  Avatar,
-  IconButton,
-  Divider,
-  Alert,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogContentText,
-  DialogActions,
-  Snackbar,
-  Badge,
-} from '@mui/material';
+import { Container, Paper, Typography, Box, Tabs, Tab, Button, List, ListItem, ListItemAvatar, ListItemText, ListItemSecondaryAction, Avatar, IconButton, Divider, Alert, Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions, Snackbar, Badge,  } from '@mui/material';
 import {
   PersonAdd as PersonAddIcon,
   PersonRemove as PersonRemoveIcon,
   Check as CheckIcon,
   Close as CloseIcon,
   Chat as ChatIcon,
-  Search as SearchIcon,
   People as PeopleIcon,
 } from '@mui/icons-material';
-import { 
-  getFriends, 
-  getPendingRequests, 
-  getSentRequests,
-  sendFriendRequest,
-  acceptFriendRequest,
-  rejectFriendRequest,
-  removeFriend,
-  clearFriendsError
-} from '../../features/friends/friendsSlice';
+import { getFriends, getPendingRequests, getSentRequests, acceptFriendRequest, rejectFriendRequest, removeFriend, clearFriendsError } from '../../features/friends/friendsSlice';
 import { Link as RouterLink } from 'react-router-dom';
 import FindUsers from './FindUsers';
 
@@ -64,9 +29,9 @@ function TabPanel({ children, value, index, ...other }) {
 
 const Friends = () => {
   const dispatch = useDispatch();
-  const { friends, pendingRequests, sentRequests, loading, error } = useSelector((state) => state.friends);
+  const { friends, pendingRequests, sentRequests, error } = useSelector((state) => state.friends);
   const [tabValue, setTabValue] = useState(0);
-  const [friendUsername, setFriendUsername] = useState('');
+
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
@@ -79,18 +44,6 @@ const Friends = () => {
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
-  };
-
-  const handleAddFriend = async () => {
-    if (!friendUsername.trim()) return;
-    
-    try {
-      await dispatch(sendFriendRequest(friendUsername)).unwrap();
-      setFriendUsername('');
-      setSuccessMessage('Friend request sent successfully!');
-    } catch (err) {
-      // Error is handled in the slice
-    }
   };
 
   const handleAcceptRequest = async (requestId) => {

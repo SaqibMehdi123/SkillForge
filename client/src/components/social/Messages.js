@@ -1,58 +1,17 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
-import {
-  Container,
-  Paper,
-  Typography,
-  Box,
-  TextField,
-  Button,
-  List,
-  ListItem,
-  ListItemAvatar,
-  ListItemText,
-  Avatar,
-  IconButton,
-  Divider,
-  Grid,
-  CircularProgress,
-  Alert,
-  Badge,
-  InputAdornment,
-  Card,
-  CardMedia,
-  Drawer,
-  useMediaQuery,
-  useTheme,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  ImageList,
-  ImageListItem,
-  Menu,
-  MenuItem,
-} from '@mui/material';
+import { Container, Paper, Typography, Box, TextField, Button, List, ListItem, ListItemAvatar, ListItemText, Avatar, IconButton, Divider, CircularProgress, Alert, Badge, InputAdornment, Card, CardMedia, Drawer, useMediaQuery, useTheme, Dialog, DialogTitle, DialogContent, DialogActions, ImageList, ImageListItem,  } from '@mui/material';
 import {
   Send as SendIcon,
   ArrowBack as ArrowBackIcon,
-  AttachFile as AttachFileIcon,
   PersonAdd as PersonAddIcon,
   Search as SearchIcon,
-  Image as ImageIcon,
   Close as CloseIcon,
   Photo as PhotoIcon,
   Chat as ChatIcon,
 } from '@mui/icons-material';
-import { 
-  getConversations, 
-  getConversation, 
-  sendMessage,
-  uploadMessageImage,
-  clearMessagesError,
-  clearCurrentConversation
-} from '../../features/messages/messagesSlice';
+import { getConversation, sendMessage, clearMessagesError, clearCurrentConversation } from '../../features/messages/messagesSlice';
 import { updateUserStreak } from '../../features/auth/authSlice';
 import { getFriends } from '../../features/friends/friendsSlice';
 import { getUserPracticePhotos } from '../../features/practice/practiceSlice';
@@ -77,24 +36,18 @@ const Messages = () => {
   const [drawerOpen, setDrawerOpen] = useState(!isMobile);
   const [photosDialogOpen, setPhotosDialogOpen] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState(null);
-  const [conversationCache, setConversationCache] = useState({});
-  const [loadedChats, setLoadedChats] = useState({});
-  const [pendingSentMessage, setPendingSentMessage] = useState(null);
+  
+  const [, setLoadedChats] = useState({});
+  const [pendingSentMessage] = useState(null);
   
   const messagesEndRef = useRef(null);
 
-  // Load conversations and friends immediately when component mounts
+  // Load friends immediately when component mounts
+  // Audit fix F12: this component polled getConversations every 15s ON TOP of
+  // the App-level poller (and FloatingChatButton polled a third time). The
+  // App-level poller is the single owner; this page just reads the store.
   useEffect(() => {
-    // Initial data loading - conversations list and friends list
-    dispatch(getConversations());
     dispatch(getFriends());
-    
-    // Set up polling for updating the conversations list - not individual chats
-    const interval = setInterval(() => {
-      dispatch(getConversations());
-    }, 15000); // Only check for new messages every 15 seconds
-    
-    return () => clearInterval(interval);
   }, [dispatch]);
 
   // Simplified useEffect to load the conversation only when userId changes
@@ -180,11 +133,6 @@ const Messages = () => {
   const handleClearImage = () => {
     setImagePreview('');
     setSelectedPhoto(null);
-  };
-
-  const handleOpenPhotosDialog = () => {
-    dispatch(getUserPracticePhotos());
-    setPhotosDialogOpen(true);
   };
 
   const handleClosePhotosDialog = () => {
@@ -906,7 +854,7 @@ const Messages = () => {
                     >
                       <img
                         src={imageUrl}
-                        alt={`Photo ${index + 1}`}
+                        alt={`Shared practice file ${index + 1}`}
                         loading="lazy"
                         style={{ height: 200, objectFit: 'cover' }}
                         onError={(e) => {
@@ -941,57 +889,8 @@ const Messages = () => {
               <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 2 }}>
                 No practice photos available to share.
               </Typography>
-              
-              {/* Create placeholder photos if none are found */}
-              <Box sx={{ width: '100%', my: 2 }}>
-                <Typography variant="body2" color="primary">
-                  Demo photos (for testing):
-                </Typography>
-                <ImageList cols={isMobile ? 2 : 3} gap={8} sx={{ mt: 1 }}>
-                  {[1, 2, 3].map((num) => (
-                    <ImageListItem 
-                      key={`placeholder-${num}`}
-                      onClick={() => handleSelectPhoto({
-                        url: `https://via.placeholder.com/300x200?text=Sample+Photo+${num}`,
-                        date: new Date().toISOString()
-                      })}
-                      sx={{ 
-                        cursor: 'pointer',
-                        borderRadius: 1,
-                        overflow: 'hidden',
-                        '&:hover': {
-                          boxShadow: 3,
-                          transform: 'scale(1.02)',
-                          transition: 'all 0.2s'
-                        }
-                      }}
-                    >
-                      <img
-                        src={`https://via.placeholder.com/300x200?text=Sample+Photo+${num}`}
-                        alt={`Sample photo ${num}`}
-                        loading="lazy"
-                        style={{ height: 200, objectFit: 'cover' }}
-                      />
-                      <Box 
-                        sx={{ 
-                          position: 'absolute', 
-                          bottom: 0, 
-                          left: 0, 
-                          right: 0, 
-                          bgcolor: 'rgba(0,0,0,0.6)',
-                          color: 'white',
-                          p: 1,
-                          fontSize: 12
-                        }}
-                      >
-                        Sample photo {num}
-                      </Box>
-                    </ImageListItem>
-                  ))}
-                </ImageList>
-              </Box>
-              
-              <Button 
+
+              <Button
                 variant="contained" 
                 color="primary" 
                 onClick={() => {

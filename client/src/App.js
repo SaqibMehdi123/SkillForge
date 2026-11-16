@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -23,7 +23,19 @@ import PracticeSession from './components/practice/PracticeSession';
 import FloatingChatButton from './components/social/FloatingChatButton';
 
 // Message Notification Component
-const MessageNotification = ({ open, message, handleClose, handleClick }) => {
+const MessageNotification = ({ open, message, handleClose }) => {
+  // Audit fix F23: notification clicks used window.location.href, forcing a
+  // full page reload that discarded all SPA state. This component lives
+  // inside <Router>, so it can navigate the SPA way.
+  const navigate = useNavigate();
+
+  const handleNotificationClick = () => {
+    if (message?.conversationId) {
+      navigate(`/messages/${message.conversationId}`);
+    }
+    handleClose();
+  };
+
   if (!message) return null;
   
   return (
@@ -54,7 +66,7 @@ const MessageNotification = ({ open, message, handleClose, handleClick }) => {
           </IconButton>
         }
         icon={<ChatIcon sx={{ color: '#0084FF' }} />}
-        onClick={handleClick}
+        onClick={handleNotificationClick}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
           <Avatar 
@@ -85,7 +97,7 @@ const ProtectedRoute = ({ children }) => {
     return <div style={{ display: 'flex', justifyContent: 'center', padding: '2rem' }}>Loading...</div>;
   }
   
-  return isAuthenticated ? children : <Navigate to="/login" />;
+  return isAuthenticated ? children : <Navigate to="/login" replace />;
 };
 
 // Redirect authenticated users away from login/register pages
@@ -100,7 +112,7 @@ const PublicOnlyRoute = ({ children }) => {
   // If authenticated, redirect to the last route or dashboard if no saved route
   if (isAuthenticated) {
     const lastRoute = localStorage.getItem('lastRoute') || '/dashboard';
-    return <Navigate to={lastRoute} />;
+    return <Navigate to={lastRoute} replace />;
   }
   
   return children;
@@ -109,8 +121,12 @@ const PublicOnlyRoute = ({ children }) => {
 // Chat button with conditional rendering
 const ConditionalChatButton = () => {
   const { isAuthenticated } = useSelector((state) => state.auth);
-  const { pathname } = window.location;
-  
+  // Audit fix F13: this read window.location.pathname, which is NOT reactive
+  // to SPA navigation - after client-side navigating to /messages the chat
+  // FAB stayed visible (or vanished) until an unrelated store update re-
+  // rendered App up to 15 seconds later.
+  const { pathname } = useLocation();
+
   // Don't show the chat button when on the messages route or not authenticated
   if (!isAuthenticated || pathname.includes('/messages')) {
     return null;
@@ -138,7 +154,6 @@ function App() {
   const themeMode = useSelector((state) => state.theme.mode);
   const { isAuthenticated } = useSelector((state) => state.auth);
   const { conversations } = useSelector((state) => state.messages);
-  const [prevConversations, setPrevConversations] = useState([]);
   const [notification, setNotification] = useState({ open: false, message: null });
   
   const dynamicTheme = React.useMemo(() =>
@@ -179,48 +194,46 @@ function App() {
   }, [dispatch, isAuthenticated]);
 
   // Check for new messages and show notifications
+  // Audit fix F14: the old version kept prevConversations in state and
+  // setPrevConversations INSIDE the same effect - it only worked because the
+  // second run was a same-reference no-op; it notified about just the first
+  // conversation with increased unread, and the ref was never reset on
+  // logout (re-login as another user compared against stale counts).
+  const prevConversationsRef = useRef([]);
   useEffect(() => {
-    if (!conversations.length || !prevConversations.length) {
-      setPrevConversations(conversations);
+    if (!isAuthenticated) {
+      prevConversationsRef.current = [];
       return;
     }
+    if (!conversations.length) return;
 
-    // Check for any conversation with new messages
-    for (const newConv of conversations) {
-      const prevConv = prevConversations.find(c => c._id === newConv._id);
-      
-      // If unread count increased, show notification
-      if (
-        prevConv && 
-        newConv.unreadCount > prevConv.unreadCount && 
-        newConv.lastMessage
-      ) {
-        // Show notification with the new message
-        setNotification({
-          open: true,
-          message: {
-            ...newConv.lastMessage,
-            sender: newConv.user,
-            conversationId: newConv._id
-          }
-        });
-        break;
+    const prev = prevConversationsRef.current;
+    if (prev.length) {
+      for (const newConv of conversations) {
+        const prevConv = prev.find((c) => c._id === newConv._id);
+        if (
+          prevConv &&
+          newConv.unreadCount > prevConv.unreadCount &&
+          newConv.lastMessage
+        ) {
+          setNotification({
+            open: true,
+            message: {
+              ...newConv.lastMessage,
+              sender: newConv.user,
+              conversationId: newConv._id,
+            },
+          });
+          break; // one toast at a time is enough
+        }
       }
     }
-    
-    // Update previous conversations state
-    setPrevConversations(conversations);
-  }, [conversations, prevConversations]);
+
+    prevConversationsRef.current = conversations;
+  }, [conversations, isAuthenticated]);
 
   const handleCloseNotification = () => {
     setNotification(prev => ({ ...prev, open: false }));
-  };
-
-  const handleNotificationClick = () => {
-    if (notification.message?.conversationId) {
-      window.location.href = `/messages/${notification.message.conversationId}`;
-    }
-    handleCloseNotification();
   };
 
   return (
@@ -300,13 +313,19 @@ function App() {
               </ProtectedRoute>
             }
           />
+          {/* F23: unknown URLs used to render only the Navbar */}
+          <Route
+            path="*"
+            element={
+              isAuthenticated ? <Navigate to="/dashboard" replace /> : <Navigate to="/" replace />
+            }
+          />
         </Routes>
         <ConditionalChatButton />
         <MessageNotification 
           open={notification.open}
           message={notification.message}
           handleClose={handleCloseNotification}
-          handleClick={handleNotificationClick}
         />
       </Router>
     </ThemeProvider>

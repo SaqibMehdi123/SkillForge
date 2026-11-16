@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
-import { Fab, Badge, Popover, List, ListItem, ListItemAvatar, ListItemText, Avatar, Typography, Box, Divider, Paper, IconButton } from '@mui/material';
-import { Chat as ChatIcon, MoreVert as MoreVertIcon, Message as MessageIcon } from '@mui/icons-material';
+import { Fab, Badge, Popover, List, ListItem, ListItemAvatar, ListItemText, Avatar, Typography, Box, Divider, Paper } from '@mui/material';
+import { Chat as ChatIcon, Message as MessageIcon } from '@mui/icons-material';
 import { getConversations } from '../../features/messages/messagesSlice';
 import { getFriends } from '../../features/friends/friendsSlice';
 
@@ -10,26 +10,16 @@ const FloatingChatButton = () => {
   const [anchorEl, setAnchorEl] = useState(null);
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { conversations, loading: conversationsLoading } = useSelector((state) => state.messages);
+  const { conversations } = useSelector((state) => state.messages);
   const { friends, loading: friendsLoading } = useSelector((state) => state.friends);
   
   const unreadCount = conversations.reduce((total, conv) => total + (conv.unreadCount || 0), 0);
   const open = Boolean(anchorEl);
 
-  useEffect(() => {
-    // Preload conversations and friends immediately when component mounts
-    dispatch(getConversations());
-    dispatch(getFriends());
-    
-    // Set up polling to check for new messages every 15 seconds
-    const interval = setInterval(() => {
-      dispatch(getConversations());
-    }, 15000);
-    
-    return () => {
-      clearInterval(interval);
-    };
-  }, [dispatch]);
+  // Audit fix F12: this component used to fetch conversations+friends on
+  // mount AND poll getConversations every 15s - the THIRD concurrent poller
+  // of the same endpoint (alongside App and Messages). It now reads the
+  // store populated by the App-level poller.
 
   const handleClick = (event) => {
     setAnchorEl(event.currentTarget);

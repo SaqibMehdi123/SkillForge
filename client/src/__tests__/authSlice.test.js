@@ -155,3 +155,29 @@ describe('token persistence on login/register', () => {
     expect(localStorage.getItem('token')).toBe('tok-123');
   });
 });
+
+describe('F11: a dead token must not linger after loadUser fails', () => {
+  test('a 401 from /users/me removes the token so the next boot stops retrying', async () => {
+    localStorage.setItem('token', 'dead-token');
+    http.onGet('/users/me').reply(401, { message: 'Invalid token' });
+
+    const store2 = mockStore({
+      auth: { isAuthenticated: false, loading: false, user: null, error: null },
+    });
+    await store2.dispatch(loadUser());
+
+    const rejected = store2.getActions().find((a) => a.type === loadUser.rejected.type);
+    expect(rejected).toBeTruthy();
+
+    // mockStore records but does NOT run reducers - apply the real one to
+    // exercise the side effect.
+    const state = reducer(
+      { isAuthenticated: false, loading: true, user: null, error: null },
+      rejected
+    );
+    expect(state.error).toBe('Invalid token');
+
+    // Before the fix the dead token survived and every boot retried it
+    expect(localStorage.getItem('token')).toBeNull();
+  });
+});

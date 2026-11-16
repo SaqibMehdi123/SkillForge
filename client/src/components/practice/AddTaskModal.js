@@ -1,21 +1,5 @@
 import React, { useState } from 'react';
-import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Button,
-  Box,
-  Typography,
-  Slider,
-  Radio,
-  RadioGroup,
-  FormControlLabel,
-  FormLabel,
-  Stack,
-  IconButton,
-} from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, TextField, Button, Typography, Slider, Radio, RadioGroup, FormControlLabel, FormLabel, Stack, IconButton,  } from '@mui/material';
 import SelfImprovementIcon from '@mui/icons-material/SelfImprovement';
 import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import LocalGroceryStoreIcon from '@mui/icons-material/LocalGroceryStore';

@@ -1,29 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
-import {
-  Container,
-  Typography,
-  Button,
-  Grid,
-  Box,
-  Card,
-  CardContent,
-  CardMedia,
-  CardActions,
-  useMediaQuery,
-  useTheme,
-  Paper,
-  Avatar,
-  Stack,
-  Divider,
-  Chip,
-  LinearProgress,
-  IconButton,
-  Tabs,
-  Tab,
-  Fade,
-  Grow,
-} from '@mui/material';
+import { Container, Typography, Button, Grid, Box, Card, CardContent, CardMedia, useMediaQuery, useTheme, Avatar, Chip, IconButton, Fade, Grow,  } from '@mui/material';
 import {
   Timer as TimerIcon,
   EmojiEvents as TrophyIcon,
@@ -32,40 +9,13 @@ import {
   MenuBook as BookIcon,
   Timeline as TimelineIcon,
   CheckCircle as CheckCircleIcon,
-  AccessTime as TimeIcon,
   LocalFireDepartment as FireIcon,
-  Speed as SpeedIcon,
-  DirectionsRun as ActivityIcon,
   KeyboardDoubleArrowDown as ScrollIcon,
   ArrowForward as ArrowForwardIcon,
-  Star as StarIcon,
   Celebration as CelebrationIcon,
 } from '@mui/icons-material';
 
 // Mock data for testimonials
-const testimonials = [
-  {
-    name: 'Alex Johnson',
-    title: 'Guitar Enthusiast',
-    avatar: 'https://randomuser.me/api/portraits/men/32.jpg',
-    quote: "SkillForge helped me track my guitar practice and stay consistent. I've made more progress in 3 months than I did all last year!",
-    stars: 5,
-  },
-  {
-    name: 'Sarah Miller',
-    title: 'Digital Artist',
-    avatar: 'https://randomuser.me/api/portraits/women/44.jpg',
-    quote: "The ability to track my daily art practice with photos has been a game-changer. I can actually see my improvement over time.",
-    stars: 5,
-  },
-  {
-    name: 'Mike Chen',
-    title: 'Language Learner',
-    avatar: 'https://randomuser.me/api/portraits/men/62.jpg',
-    quote: "The streak feature keeps me motivated to practice Spanish every day. I've maintained a 45-day streak so far!",
-    stars: 4,
-  },
-];
 
 // App statistics - more realistic numbers
 const appStats = [
@@ -213,7 +163,7 @@ const teamMembers = [
 const Home = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.down('md'));
+
   const [activeTab, setActiveTab] = useState(0);
   const [animateStats, setAnimateStats] = useState(false);
   
@@ -236,10 +186,6 @@ const Home = () => {
     
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
-  
-  const handleTabChange = (event, newValue) => {
-    setActiveTab(newValue);
-  };
 
   return (
     <Box>
