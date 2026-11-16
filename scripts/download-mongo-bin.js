@@ -1,4 +1,7 @@
-const { MongoBinary } = require('/home/z/my-project/SkillForge/server/node_modules/mongodb-memory-server-core');
+// Resolves mongodb-memory-server-core from the server workspace so the
+// script works from any checkout.
+const path = require('path');
+const { MongoBinary } = require(path.join(__dirname, '..', 'server', 'node_modules', 'mongodb-memory-server-core'));
 
 (async () => {
   console.log('Pre-downloading MongoDB binary for mongodb-memory-server...');
