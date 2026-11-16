@@ -1,4 +1,7 @@
 const jwt = require('jsonwebtoken');
+// Audit fix S8: use the shared config secret, not process.env directly -
+// config/env.js owns the production fail-fast and the dev random fallback.
+const config = require('../config/env');
 
 module.exports = function (req, res, next) {
   try {
@@ -30,7 +33,7 @@ module.exports = function (req, res, next) {
     
     // Verify the token
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, config.JWT_SECRET);
       req.user = decoded.id;
       next();
     } catch (err) {

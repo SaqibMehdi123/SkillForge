@@ -1,6 +1,11 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+// Audit fix S8: the JWT secret has exactly one source of truth - config/env.js
+// (which fails fast in production and uses a random per-boot secret in dev).
+// Reading process.env directly here bypassed that and signed tokens with
+// undefined when no .env existed.
+const config = require('../config/env');
 
 // Audit fix S10: pre-computed hash so an unknown-email login costs the same
 // bcrypt work as a known-email one, removing the user-enumeration timing
@@ -8,7 +13,7 @@ const bcrypt = require('bcryptjs');
 const DUMMY_PASSWORD_HASH = bcrypt.hashSync('skillforge-timing-equalizer', 10);
 
 function generateToken(user) {
-  return jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+  return jwt.sign({ id: user._id }, config.JWT_SECRET, { expiresIn: '7d' });
 }
 
 // Audit fix B9: normalize the email exactly like the schema does, so

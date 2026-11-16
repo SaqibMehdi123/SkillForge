@@ -198,8 +198,20 @@ const deletePhotoByFilename = async (filename, userId) => {
       console.warn('Security warning: Attempted to delete file not owned by user:', filename, userId);
       return false;
     }
-    
+
+    // Audit fix S12: the prefix check alone still allowed
+    // '<userId>_../../..' to escape the uploads directory after path
+    // normalization. Refuse anything that is not a bare basename and
+    // verify containment after resolution.
+    if (path.basename(filename) !== filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      console.warn('Security warning: Refusing non-basename filename:', filename);
+      return false;
+    }
     const filepath = path.join(UPLOAD_DIR, filename);
+    if (!filepath.startsWith(UPLOAD_DIR + path.sep)) {
+      return false;
+    }
+
     if (fs.existsSync(filepath)) {
       await fs.promises.unlink(filepath);
       console.log(`Deleted photo file: ${filepath}`);
