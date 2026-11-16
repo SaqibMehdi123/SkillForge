@@ -2,46 +2,15 @@ const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
 const auth = require('../middleware/auth');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const { imageUpload, handleUploadError } = require('../config/upload');
 
-// Configure multer for avatar uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    const uploadDir = path.join(__dirname, '../uploads/avatars');
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, 'avatar-' + uniqueSuffix + ext);
-  }
-});
-
-// File filter for images
-const fileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith('image/')) {
-    cb(null, true);
-  } else {
-    cb(new Error('Not an image! Please upload only images.'), false);
-  }
-};
-
-const upload = multer({ 
-  storage: storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB max file size
-  },
-  fileFilter: fileFilter
-});
+// S1 + C7: shared hardening - mimetype allowlist, server-generated uuid
+// filename, 5 MB cap. The client's originalname never touches the filesystem.
+const upload = imageUpload({ dir: 'uploads/avatars', maxSizeMb: 5 });
 
 router.get('/me', auth, userController.getMe);
 router.put('/me', auth, userController.updateProfile);
-router.post('/avatar', auth, upload.single('avatar'), userController.uploadAvatar);
+router.post('/avatar', auth, upload.single('avatar'), handleUploadError, userController.uploadAvatar);
 // Audit fix B14: the profile detail route only existed as the doubled
 // /users/users/:id segment, so the natural GET /api/users/:id hit nothing.
 // The legacy alias is kept for any old clients.
