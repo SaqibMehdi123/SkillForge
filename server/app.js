@@ -1,8 +1,10 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const path = require('path');
 const fs = require('fs');
 const config = require('./config/env');
+const { authLimiter, apiLimiter, uploadLimiter } = require('./middleware/rateLimit');
 
 /**
  * Express app factory (kept free of mongoose.connect and app.listen so that
@@ -11,8 +13,13 @@ const config = require('./config/env');
 const app = express();
 
 // Middleware
+// S15: baseline security headers. CORP is cross-origin so the SPA on its own
+// origin can still embed /uploads images.
+app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({ origin: config.CLIENT_URL, credentials: true }));
-app.use(express.json());
+// S4: rate limiting - generous global bucket, strict on auth, moderate on uploads.
+app.use(apiLimiter);
+app.use(express.json({ limit: '25mb' })); // S9: base64 photos travel as JSON
 app.use(express.urlencoded({ extended: true }));
 
 // Ensure upload directories exist
@@ -32,17 +39,17 @@ app.get('/', (req, res) => {
   res.send('SkillForge API is running');
 });
 
-// Import routes
-app.use('/api/auth', require('./routes/authRoutes'));
+// Import routes (auth gets its own strict limiter - S4)
+app.use('/api/auth', authLimiter, require('./routes/authRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/practice', require('./routes/practiceRoutes'));
 app.use('/api/streaks', require('./routes/streakRoutes'));
 app.use('/api/achievements', require('./routes/achievementRoutes'));
-app.use('/api/media', require('./routes/mediaRoutes'));
+app.use('/api/media', uploadLimiter, require('./routes/mediaRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 app.use('/api/friends', require('./routes/friendRoutes'));
-app.use('/api/messages', require('./routes/messageRoutes'));
-app.use('/api/photos', require('./routes/photoRoutes'));
+app.use('/api/messages', uploadLimiter, require('./routes/messageRoutes'));
+app.use('/api/photos', uploadLimiter, require('./routes/photoRoutes'));
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

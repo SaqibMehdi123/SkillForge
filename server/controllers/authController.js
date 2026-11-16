@@ -1,5 +1,11 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+
+// Audit fix S10: pre-computed hash so an unknown-email login costs the same
+// bcrypt work as a known-email one, removing the user-enumeration timing
+// oracle.
+const DUMMY_PASSWORD_HASH = bcrypt.hashSync('skillforge-timing-equalizer', 10);
 
 function generateToken(user) {
   return jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -51,6 +57,8 @@ exports.login = async (req, res, next) => {
     const { email, password } = req.body;
     const user = await User.findOne({ email: normalizeEmail(email) });
     if (!user) {
+      // S10: burn the same bcrypt time as a real compare before answering
+      await bcrypt.compare(String(password || ''), DUMMY_PASSWORD_HASH);
       return res.status(400).json({ message: 'Invalid credentials' });
     }
     const isMatch = await user.comparePassword(password);
