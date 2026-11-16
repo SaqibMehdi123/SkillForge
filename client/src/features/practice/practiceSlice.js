@@ -3,6 +3,13 @@ import API from '../../api';
 import { updateUserStreak } from '../auth/authSlice';
 import { SERVER_URL } from '../../config';
 
+// Audit fix F1: the photo thunks below called `axios.post(...)` and
+// `${API_URL}` WITHOUT importing either - every dispatch threw
+// ReferenceError, which the catch swallowed, so the entire photo pipeline
+// (capture, galleries, upload stats) was silently dead. All three thunks
+// now go through the shared API instance, whose interceptor attaches the
+// auth token - the hand-rolled localStorage token headers are gone too.
+
 // Async thunks for backend integration
 export const startSession = createAsyncThunk(
   'practice/startSession',
@@ -106,55 +113,25 @@ export const saveTaskPhoto = createAsyncThunk(
   'practice/saveTaskPhoto',
   async ({ imageData, taskName, taskCategory, taskPriority, timestamp, sessionId }, { rejectWithValue, dispatch }) => {
     try {
-      const token = localStorage.getItem('token');
-      const config = {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      };
-      
-      console.log('Saving task photo with data:', { 
+      const response = await API.post('/photos', {
+        imageData,
         taskName,
         taskCategory,
         taskPriority,
-        hasSessionId: !!sessionId 
+        timestamp,
+        sessionId,
       });
-      
-      const response = await axios.post(
-        `${API_URL}/photos`, 
-        { 
-          imageData, 
-          taskName,
-          taskCategory,
-          taskPriority, 
-          timestamp,
-          sessionId // Include sessionId if available
-        },
-        config
-      );
-      
-      console.log('Photo saved successfully:', response.data);
-      
+
       // Update user streak whenever a photo is uploaded
       try {
-        const streakResult = await dispatch(updateUserStreak()).unwrap();
-        console.log('Streak updated successfully after saving photo:', streakResult);
-        
-        // Show visual feedback
-        if (streakResult.xpAdded > 0) {
-          console.log(`XP earned: ${streakResult.xpAdded}`);
-          // Could dispatch a notification action here
-        }
-        
+        await dispatch(updateUserStreak()).unwrap();
       } catch (error) {
-        console.error("Error updating streak:", error);
         // Continue even if streak update fails - at least the photo was saved
+        console.error('Error updating streak:', error);
       }
-      
+
       return response.data.photo;
     } catch (error) {
-      console.error('Error saving photo:', error);
       const message =
         error.response?.data?.message ||
         error.message ||
@@ -168,14 +145,7 @@ export const getUserPhotos = createAsyncThunk(
   'practice/getUserPhotos',
   async (_, { rejectWithValue }) => {
     try {
-      const token = localStorage.getItem('token');
-      const config = {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      };
-      
-      const response = await axios.get(`${API_URL}/photos`, config);
+      const response = await API.get('/photos');
       return response.data.photos;
     } catch (error) {
       const message =
@@ -192,96 +162,52 @@ export const getUserPracticePhotos = createAsyncThunk(
   'practice/getUserPracticePhotos',
   async (_, { rejectWithValue }) => {
     try {
-      const token = localStorage.getItem('token');
-      const config = {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      };
-      
-      console.log('Fetching practice photos...');
-      
-      // First, fetch the user's practice photos
-      const response = await axios.get(`${API_URL}/practice/photos`, config);
-      console.log('Practice photos response:', response.data);
-      
-      // Also fetch general photos which might be in a different endpoint
-      const generalPhotosResponse = await axios.get(`${API_URL}/photos`, config);
-      console.log('General photos response:', generalPhotosResponse.data);
-      
-      // Combine both sets of photos
+      // Fetch the user's practice photos and general photos in parallel
+      const [practiceRes, generalRes] = await Promise.all([
+        API.get('/practice/photos'),
+        API.get('/photos'),
+      ]);
+
       let combinedPhotos = [];
-      
-      // Process practice photos if they exist
-      if (response.data && response.data.data) {
-        const practicePhotos = response.data.data.map(photo => ({
+
+      // Practice photos
+      if (practiceRes.data && practiceRes.data.data) {
+        const practicePhotos = practiceRes.data.data.map((photo) => ({
           ...photo,
-          url: photo.url && !photo.url.startsWith('http') ? 
-            `${SERVER_URL}${photo.url}` : photo.url,
-          source: 'practice'
+          url: photo.url && !photo.url.startsWith('http')
+            ? `${SERVER_URL}${photo.url}`
+            : photo.url,
+          source: 'practice',
         }));
         combinedPhotos = [...combinedPhotos, ...practicePhotos];
       }
-      
-      // Add general photos if they exist
-      if (generalPhotosResponse.data && generalPhotosResponse.data.photos) {
-        const generalPhotos = generalPhotosResponse.data.photos.map(photo => ({
+
+      // General photos
+      if (generalRes.data && generalRes.data.photos) {
+        const generalPhotos = generalRes.data.photos.map((photo) => ({
           ...photo,
-          url: photo.path && !photo.path.startsWith('http') ? 
-            `${SERVER_URL}${photo.path}` : photo.path || photo.url,
-          source: 'general'
+          url: photo.path && !photo.path.startsWith('http')
+            ? `${SERVER_URL}${photo.path}`
+            : photo.path || photo.url,
+          source: 'general',
         }));
         combinedPhotos = [...combinedPhotos, ...generalPhotos];
       }
-      
-      // For testing - if no photos were found, add mock photo data
-      if (combinedPhotos.length === 0) {
-        console.log('No real photos found, attempting to generate mock data');
-        
-        // Try to fetch any images from the server's public directory
-        try {
-          const mockResponse = await axios.get(`${API_URL}/public/images`, config);
-          if (mockResponse.data && mockResponse.data.images) {
-            const mockPhotos = mockResponse.data.images.map((path, index) => ({
-              id: `mock-${index}`,
-              url: `${SERVER_URL}${path}`,
-              date: new Date().toISOString(),
-              source: 'mock'
-            }));
-            combinedPhotos = [...combinedPhotos, ...mockPhotos];
-          }
-        } catch (mockError) {
-          console.log('Could not load mock images:', mockError);
-          // Create hardcoded placeholder photos if everything else fails
-          combinedPhotos = [
-            {
-              id: 'sample-1',
-              url: 'https://via.placeholder.com/300x200?text=Practice+Photo+1',
-              date: new Date().toISOString(),
-              source: 'placeholder'
-            },
-            {
-              id: 'sample-2',
-              url: 'https://via.placeholder.com/300x200?text=Practice+Photo+2',
-              date: new Date(Date.now() - 86400000).toISOString(),
-              source: 'placeholder'
-            }
-          ];
-        }
-      }
-      
-      console.log('Final photos to display:', combinedPhotos);
-      
-      // Sort by date if available
+
+      // Audit fix (dead placeholder branch): the old code injected fake
+      // via.placeholder.com photos when the gallery was empty - the service
+      // has shut down, so users saw broken images pretending to be their
+      // practice photos. An empty gallery is now simply empty.
+
+      // Sort by date if available (newest first)
       combinedPhotos.sort((a, b) => {
         const dateA = a.date || a.createdAt || a.timestamp || 0;
         const dateB = b.date || b.createdAt || b.timestamp || 0;
-        return new Date(dateB) - new Date(dateA); // Sort newest first
+        return new Date(dateB) - new Date(dateA);
       });
-      
+
       return combinedPhotos;
     } catch (error) {
-      console.error('Error fetching practice photos:', error);
       return rejectWithValue(error.response?.data?.message || 'Failed to load practice photos');
     }
   }
