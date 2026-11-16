@@ -125,7 +125,8 @@ exports.getConversation = async (req, res, next) => {
       ]
     })
     .sort({ createdAt: 1 })
-    .populate('sender', 'username avatar');
+    .populate('sender', 'username avatar')
+    .lean();
 
     res.status(200).json({ data: messages });
   } catch (err) {

@@ -15,4 +15,8 @@ const practiceSessionSchema = new mongoose.Schema({
   notes: { type: String },
 }, { timestamps: true });
 
+// Audit fix P1: history/photos/count queries filter user (+ completed)
+practiceSessionSchema.index({ user: 1, createdAt: -1 });
+practiceSessionSchema.index({ user: 1, completed: 1 });
+
 module.exports = mongoose.model('PracticeSession', practiceSessionSchema); 

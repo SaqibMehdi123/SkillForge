@@ -177,7 +177,7 @@ exports.getFriends = async (req, res, next) => {
   try {
     const userId = req.user;
     
-    const user = await User.findById(userId).populate('friends', 'username avatar level xp');
+    const user = await User.findById(userId).populate('friends', 'username avatar level xp').lean();
     
     res.status(200).json({ data: user.friends });
   } catch (err) {

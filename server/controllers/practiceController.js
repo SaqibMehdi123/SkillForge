@@ -130,11 +130,11 @@ async function checkAndUnlockFirstStepsAchievement(userId) {
 exports.getHistory = async (req, res, next) => {
   try {
     // Fetch all practice sessions for the user
-    const sessions = await PracticeSession.find({ user: req.user }).sort({ createdAt: -1 });
+    // Audit fix P2: read-only list - lean keeps hydration cheap.
+    const sessions = await PracticeSession.find({ user: req.user }).sort({ createdAt: -1 }).lean();
     
     // Map any client-specific properties to match the expected format
-    const formattedSessions = sessions.map(session => {
-      const sessionObj = session.toObject();
+    const formattedSessions = sessions.map(sessionObj => {
       return {
         ...sessionObj,
         id: sessionObj._id, // Add ID field that client expects
@@ -163,7 +163,7 @@ exports.getPracticePhotos = async (req, res, next) => {
       user: req.user,
       completed: true,
       photo: { $exists: true, $ne: null }
-    }).sort({ endedAt: -1 });
+    }).sort({ endedAt: -1 }).lean();
     
     // Extract photo information from sessions
     const practicePhotos = sessions.map(session => {

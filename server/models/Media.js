@@ -9,4 +9,7 @@ const mediaSchema = new mongoose.Schema({
   uploadedAt: { type: Date, default: Date.now },
 }, { timestamps: true });
 
+// Audit fix P1: media lists filter by user
+mediaSchema.index({ user: 1 });
+
 module.exports = mongoose.model('Media', mediaSchema); 

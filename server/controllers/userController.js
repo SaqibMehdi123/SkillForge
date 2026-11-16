@@ -12,7 +12,8 @@ function normalizeEmail(email) {
 
 exports.getMe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user).select('-password');
+    // P2: read-only - lean keeps hydration cheap
+    const user = await User.findById(req.user).select('-password').lean();
     res.json(user);
   } catch (err) {
     next(err);
@@ -25,7 +26,7 @@ exports.getUserById = async (req, res, next) => {
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ message: 'Invalid user id' });
     }
-    const user = await User.findById(req.params.id).select('-password');
+    const user = await User.findById(req.params.id).select('-password').lean();
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user);
   } catch (err) {
@@ -108,7 +109,8 @@ exports.getAllUsers = async (req, res, next) => {
     // Only return necessary fields for security
     const users = await User.find({ _id: { $ne: currentUserId } })
       .select('username avatar level xp')
-      .sort({ username: 1 });
+      .sort({ username: 1 })
+      .lean();
     
     console.log(`Found ${users.length} users`);
     

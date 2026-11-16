@@ -9,4 +9,7 @@ const notificationSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 }, { timestamps: true });
 
+// Audit fix P1: notification lists filter user with a createdAt sort
+notificationSchema.index({ user: 1, createdAt: -1 });
+
 module.exports = mongoose.model('Notification', notificationSchema); 

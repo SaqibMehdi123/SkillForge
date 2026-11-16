@@ -3,7 +3,7 @@ const path = require('path');
 
 exports.getMyMedia = async (req, res, next) => {
   try {
-    const media = await Media.find({ user: req.user });
+    const media = await Media.find({ user: req.user }).lean();
     res.json(media);
   } catch (err) {
     next(err);
