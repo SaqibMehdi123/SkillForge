@@ -49,6 +49,7 @@ import {
 } from '@mui/icons-material';
 import { updateProfile } from '../../features/auth/authSlice';
 import { getHistory } from '../../features/practice/practiceSlice';
+import { safeDateKey } from '../../utils/format';
 import { styled } from '@mui/material/styles';
 import { useTheme } from '@mui/material/styles';
 import axios from 'axios';
@@ -109,11 +110,14 @@ const Profile = () => {
   });
 
   // Get practice sessions by date
+  // Audit fix F9: locally-completed tasks have no completedAt/endedAt and
+  // `new Date(undefined).toISOString()` threw RangeError - Profile
+  // white-screened. safeDateKey returns null for missing/invalid dates.
   const sessionsByDate = last7Days.map(day => {
     return {
       date: day,
-      count: completedTasks.filter(task => 
-        new Date(task.completedAt || task.endedAt).toISOString().split('T')[0] === day
+      count: completedTasks.filter(task =>
+        safeDateKey(task.completedAt || task.endedAt || task.updatedAt || task.createdAt) === day
       ).length
     };
   }).reverse(); // reverse to get chronological order

@@ -29,3 +29,28 @@ export function safeIsoDate(value) {
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
+
+/**
+ * Audit fix F9: Profile called `new Date(task.completedAt || task.endedAt)
+ * .toISOString()` on every render - locally-completed tasks have NEITHER
+ * field, `new Date(undefined).toISOString()` throws RangeError, and the
+ * Profile page white-screened. Returns a YYYY-MM-DD key or null.
+ */
+export function safeDateKey(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().split('T')[0];
+}
+
+/**
+ * Audit fix F17: Messages formatted `new Date(msg.createdAt)` unguarded -
+ * one message without createdAt crashed the whole chat pane. Returns
+ * 'h:mm a' or an empty string.
+ */
+export function safeTimeLabel(value, formatter) {
+  if (!value) return '';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  return formatter ? formatter(d) : d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}

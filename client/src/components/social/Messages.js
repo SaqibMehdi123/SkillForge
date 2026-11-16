@@ -57,6 +57,7 @@ import { updateUserStreak } from '../../features/auth/authSlice';
 import { getFriends } from '../../features/friends/friendsSlice';
 import { getUserPracticePhotos } from '../../features/practice/practiceSlice';
 import { format } from 'date-fns';
+import { safeTimeLabel } from '../../utils/format';
 import { SERVER_URL } from '../../config';
 
 const Messages = () => {
@@ -689,7 +690,7 @@ const Messages = () => {
                                       fontSize: '0.7rem'
                                     }}
                                   >
-                                    {format(new Date(msg.createdAt), 'h:mm a')}
+                                    {safeTimeLabel(msg.createdAt, (d) => format(d, 'h:mm a'))}
                                   </Typography>
                                 )}
                               </Box>

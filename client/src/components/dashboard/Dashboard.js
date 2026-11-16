@@ -99,9 +99,13 @@ const Dashboard = () => {
     0
   );
 
-  // Get recent tasks (last 5)
+  // Get recent tasks (last 5) - F9: guard missing/invalid completedAt
+  // (locally completed tasks only carry endedAt); NaN comparisons used to
+  // produce unstable orderings.
+  const timestampOf = (t) =>
+    new Date(t.completedAt || t.endedAt || t.updatedAt || t.createdAt || 0).getTime() || 0;
   const recentCompletedTasks = [...completedTasks]
-    .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt))
+    .sort((a, b) => timestampOf(b) - timestampOf(a))
     .slice(0, 5);
 
   // Calculate streak summary
