@@ -42,6 +42,9 @@ const upload = multer({
 router.get('/me', auth, userController.getMe);
 router.put('/me', auth, userController.updateProfile);
 router.post('/avatar', auth, upload.single('avatar'), userController.uploadAvatar);
+// Audit fix B14: the profile detail route only existed as the doubled
+// /users/users/:id segment, so the natural GET /api/users/:id hit nothing.
+// The legacy alias is kept for any old clients.
 router.get('/users/:id', auth, userController.getUserById);
 router.post('/friends', auth, userController.addFriend);
 router.get('/users', auth, userController.getAllUsers);
@@ -51,5 +54,8 @@ router.get('/', auth, userController.getAllUsers);
 router.put('/xp', auth, userController.updateXP);
 router.put('/streak', auth, userController.updateStreak);
 router.post('/badges', auth, userController.addBadge);
+// B14: natural detail route - MUST come after the literal paths above so
+// /me, /users, /xp... are never captured by :id.
+router.get('/:id', auth, userController.getUserById);
 
 module.exports = router; 

@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const User = require('../models/User');
 const { applyXp, MAX_XP_PER_REQUEST } = require('../services/xpService');
 const path = require('path');
@@ -20,6 +21,10 @@ exports.getMe = async (req, res, next) => {
 
 exports.getUserById = async (req, res, next) => {
   try {
+    // B14 hygiene: a malformed id is a 400, not a CastError 500
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: 'Invalid user id' });
+    }
     const user = await User.findById(req.params.id).select('-password');
     if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user);

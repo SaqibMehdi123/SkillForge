@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const FriendRequest = require('../models/FriendRequest');
+const mongoose = require('mongoose');
 
 // Send a friend request
 exports.sendFriendRequest = async (req, res, next) => {
@@ -100,6 +101,11 @@ exports.acceptFriendRequest = async (req, res, next) => {
     const { requestId } = req.params;
     const userId = req.user;
 
+    // B18-style hygiene: a garbage id is a 400, not a CastError 500
+    if (!mongoose.Types.ObjectId.isValid(requestId)) {
+      return res.status(400).json({ message: 'Invalid request id' });
+    }
+
     // Find the request
     const friendRequest = await FriendRequest.findById(requestId);
     if (!friendRequest) {
@@ -109,6 +115,13 @@ exports.acceptFriendRequest = async (req, res, next) => {
     // Ensure the current user is the recipient
     if (friendRequest.recipient.toString() !== userId.toString()) {
       return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    // Audit fix B17: only PENDING requests can be accepted. The old code
+    // silently re-activated rejected requests into friendships and allowed
+    // re-accepting already-accepted ones.
+    if (friendRequest.status !== 'pending') {
+      return res.status(409).json({ message: `Friend request is already ${friendRequest.status}` });
     }
 
     // Update request status
@@ -178,17 +191,36 @@ exports.removeFriend = async (req, res, next) => {
     const { friendId } = req.params;
     const userId = req.user;
 
-    // Remove friend from user's friends list
-    await User.findByIdAndUpdate(
-      userId,
+    // Audit fix B18: a garbage id used to surface as a CastError 500
+    if (!mongoose.Types.ObjectId.isValid(friendId)) {
+      return res.status(400).json({ message: 'Invalid friend id' });
+    }
+
+    // Audit fix B18: removing a non-friend reported success before; require
+    // an actual friendship to remove.
+    const result = await User.updateOne(
+      { _id: userId, friends: friendId },
       { $pull: { friends: friendId } }
     );
+    if (result.matchedCount === 0) {
+      return res.status(404).json({ message: 'You are not friends with this user' });
+    }
 
     // Remove user from friend's friends list
     await User.findByIdAndUpdate(
       friendId,
       { $pull: { friends: userId } }
     );
+
+    // Audit fix B18: the FriendRequest row stayed 'accepted' forever, so
+    // sendFriendRequest then refused every future re-request with "already
+    // friends" - two users could never re-add each other. Delete it.
+    await FriendRequest.findOneAndDelete({
+      $or: [
+        { sender: userId, recipient: friendId },
+        { sender: friendId, recipient: userId },
+      ],
+    });
 
     res.status(200).json({ message: 'Friend removed successfully' });
   } catch (err) {
