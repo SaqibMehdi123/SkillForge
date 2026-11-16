@@ -12,8 +12,8 @@ SkillForge is a comprehensive skill development and social learning platform tha
 - **Practice Sessions**: Interactive skill practice with customizable sessions
 - **Achievement System**: Gamified learning experience with unlockable achievements 
 - **Social Features**:
-  - Friend connections
-  - Real-time messaging with read receipts
+  - Friend connections via a request/accept flow
+  - Messaging with read receipts (near-real-time: conversations poll every 15 s)
   - Media sharing capabilities
   - Notification system
 - **Profile Management**: Customizable user profiles with stats and achievements
@@ -27,9 +27,6 @@ SkillForge is a comprehensive skill development and social learning platform tha
 - **Redux Toolkit**: State management with efficient data flow
 - **React Router**: Client-side routing
 - **Material UI**: Component library for consistent design
-- **Chart.js**: Data visualization
-- **Socket.io Client**: Real-time communication
-- **Framer Motion**: Animation library
 - **Axios**: HTTP client
 
 ### Backend
@@ -38,16 +35,16 @@ SkillForge is a comprehensive skill development and social learning platform tha
 - **MongoDB**: NoSQL database
 - **Mongoose**: MongoDB object modeling
 - **JWT**: Authentication
-- **Socket.io**: Websockets for real-time features
 - **Bcrypt**: Password hashing
 - **Multer**: File uploads
+- **Jest + Supertest**: Integration tests (in-memory MongoDB)
 
 ## Getting Started
 
 ### Prerequisites
-- Node.js (v16 or later)
+- Node.js (v18 or later - Express 5 requires it)
 - MongoDB (local instance or MongoDB Atlas)
-- npm or yarn
+- npm
 
 ### Installation
 
@@ -59,15 +56,12 @@ SkillForge is a comprehensive skill development and social learning platform tha
 
 2. Install dependencies
    ```bash
-   # Install root dependencies
+   # Install server dependencies
+   cd server
    npm install
    
    # Install client dependencies
-   cd client
-   npm install
-   
-   # Install server dependencies
-   cd ../server
+   cd ../client
    npm install
    ```
 
@@ -128,6 +122,23 @@ The API includes the following main endpoints:
 - **Friends**: `/api/friends` - Friend connections
 - **Messages**: `/api/messages` - User messaging
 - **Photos**: `/api/photos` - Photo uploads and management
+
+## Testing
+
+The project ships with unit + integration tests on both sides:
+
+```bash
+# Server: Jest + Supertest against an in-memory MongoDB (from server/)
+cd server
+npm test
+
+# Client: CRA Jest + React Testing Library (from client/)
+cd client
+npm test
+```
+
+The GitHub Actions workflow (`.github/workflows/ci.yml`) runs both suites
+on every push and pull request.
 
 ## Contributing
 
