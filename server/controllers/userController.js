@@ -3,6 +3,12 @@ const { applyXp, MAX_XP_PER_REQUEST } = require('../services/xpService');
 const path = require('path');
 const fs = require('fs');
 
+// Audit fix B9: emails are stored/compared lowercased - keep the helper
+// aligned with the schema's lowercase/trim options.
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
 exports.getMe = async (req, res, next) => {
   try {
     const user = await User.findById(req.user).select('-password');
@@ -41,13 +47,14 @@ exports.updateProfile = async (req, res, next) => {
       user.username = username;
     }
     
-    // Check if updating email and it already exists
-    if (email && email !== user.email) {
-      const existingUser = await User.findOne({ email });
+    // Check if updating email and it already exists (audit fix B9: normalize casing)
+    if (email && normalizeEmail(email) !== user.email) {
+      const normalizedEmail = normalizeEmail(email);
+      const existingUser = await User.findOne({ email: normalizedEmail });
       if (existingUser) {
         return res.status(400).json({ message: 'Email already registered' });
       }
-      user.email = email;
+      user.email = normalizedEmail;
     }
     
     // Update other fields if provided

@@ -5,18 +5,35 @@ function generateToken(user) {
   return jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 }
 
+// Audit fix B9: normalize the email exactly like the schema does, so
+// lookups match regardless of the casing the client sent.
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
 exports.register = async (req, res, next) => {
   try {
     const { username, email, password } = req.body;
-    console.log('Registering:', username, email);
     if (!username || !email || !password) {
       return res.status(400).json({ message: 'All fields are required' });
     }
-    const existing = await User.findOne({ $or: [{ email }, { username }] });
+    const normalizedEmail = normalizeEmail(email);
+    const existing = await User.findOne({ $or: [{ email: normalizedEmail }, { username }] });
     if (existing) {
       return res.status(400).json({ message: 'User already exists' });
     }
-    const user = await User.create({ username, email, password });
+    let user;
+    try {
+      user = await User.create({ username, email: normalizedEmail, password });
+    } catch (err) {
+      // Audit fix B10: two registrations can pass the pre-check concurrently;
+      // the loser hits the unique index. Return a friendly conflict instead
+      // of leaking the raw E11000 duplicate-key error.
+      if (err && err.code === 11000) {
+        return res.status(409).json({ message: 'User already exists' });
+      }
+      throw err;
+    }
     if (!user) {
       return res.status(500).json({ message: 'Failed to create user' });
     }
@@ -24,7 +41,7 @@ exports.register = async (req, res, next) => {
     const { password: pw, ...userData } = user.toObject();
     res.status(201).json({ user: userData, token });
   } catch (err) {
-    console.error('Register error:', err);
+    console.error('Register error:', err.message);
     next(err);
   }
 };
@@ -32,14 +49,11 @@ exports.register = async (req, res, next) => {
 exports.login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
-    console.log('Login attempt:', email);
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: normalizeEmail(email) });
     if (!user) {
-      console.log('User not found');
       return res.status(400).json({ message: 'Invalid credentials' });
     }
     const isMatch = await user.comparePassword(password);
-    console.log('Password match:', isMatch);
     if (!isMatch) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
@@ -47,7 +61,7 @@ exports.login = async (req, res, next) => {
     const { password: pw, ...userData } = user.toObject();
     res.json({ user: userData, token });
   } catch (err) {
-    console.error('Login error:', err);
+    console.error('Login error:', err.message);
     next(err);
   }
-}; 
+};

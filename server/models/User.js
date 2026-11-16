@@ -2,8 +2,11 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
-  username: { type: String, required: true, unique: true },
-  email: { type: String, required: true, unique: true },
+  username: { type: String, required: true, unique: true, trim: true },
+  // Audit fix B9: emails are matched case-insensitively end to end - they
+  // are lowercased and trimmed at the schema level so "USER@x.com" and
+  // "user@x.com" are the same account everywhere.
+  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: { type: String, required: true },
   avatar: { type: String },
   bio: { type: String, default: '' },
