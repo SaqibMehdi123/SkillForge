@@ -93,9 +93,9 @@ const Dashboard = () => {
     return `${hours}h ${mins}m`;
   };
 
-  // Calculate total practice time in minutes
+  // Calculate total practice time in minutes (F3: store holds MINUTES now)
   const totalPracticeMinutes = completedTasks.reduce(
-    (total, task) => total + Math.floor(task.duration / 60), 
+    (total, task) => total + (task.duration || 0), 
     0
   );
 
@@ -199,7 +199,7 @@ const Dashboard = () => {
         const dayIndex = (taskDate.getDay() + 6) % 7;
         
         // Add minutes and count completion
-        activityData[dayIndex].minutes += Math.floor((task.duration || 0) / 60);
+        activityData[dayIndex].minutes += Math.round(task.duration || 0);
         activityData[dayIndex].completed += 1;
       }
     });
@@ -624,7 +624,9 @@ const Dashboard = () => {
                           </Box>
                           <LinearProgress 
                             variant="determinate" 
-                            value={((currentTask.duration - liveTime) / currentTask.duration) * 100}
+                            // F5: duration is MINUTES, liveTime is SECONDS - the old
+                            // subtraction mixed units and pinned the bar at 0%.
+                            value={Math.max(0, Math.min(100, (1 - liveTime / Math.max(1, currentTask.duration * 60)) * 100))}
                             sx={{ 
                               mb: 2, 
                               height: 6, 
@@ -750,7 +752,7 @@ const Dashboard = () => {
                               {task.label || task.name}
                             </Typography>
                             <Chip
-                              label={`${Math.floor(task.duration / 60)} min`}
+                              label={`${task.duration} min`}
                               size="small"
                               variant="outlined"
                               sx={{ height: 24 }}
@@ -829,7 +831,7 @@ const Dashboard = () => {
                             <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
                               <AccessTimeIcon sx={{ color: 'text.secondary', fontSize: 18, mr: 0.5 }} />
                               <Typography variant="body2" color="text.secondary">
-                                {Math.floor(task.duration / 60)} minutes
+                                {task.duration || 0} minutes
                               </Typography>
                             </Box>
                             <Button

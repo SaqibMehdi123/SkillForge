@@ -95,9 +95,9 @@ const Profile = () => {
     dispatch(getHistory());
   }, [dispatch]);
 
-  // Calculate total practice time in minutes
+  // Calculate total practice time in minutes (F3: store holds MINUTES now)
   const totalPracticeMinutes = completedTasks.reduce(
-    (total, task) => total + Math.floor((task.duration || 0) / 60), 
+    (total, task) => total + (task.duration || 0), 
     0
   );
 
@@ -1026,7 +1026,7 @@ const Profile = () => {
                           secondary={
                             <>
                               <Typography variant="body2" color="text.secondary">
-                                {Math.round((task.duration || 0) / 60)} minutes
+                                {task.duration || 0} minutes
                               </Typography>
                               <Typography variant="caption" color="text.secondary">
                                 {formatDate(task.completedAt || task.endedAt)}

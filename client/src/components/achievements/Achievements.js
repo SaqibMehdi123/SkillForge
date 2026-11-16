@@ -239,9 +239,9 @@ const Achievements = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState(0); // 0 = All, 1 = Unlocked
 
-  // Calculate total practice time in minutes
+  // Calculate total practice time in minutes (F3: store holds MINUTES now)
   const totalPracticeMinutes = Array.isArray(completedTasks) ? completedTasks.reduce(
-    (total, task) => total + Math.floor(((task && task.duration) || 0) / 60), 
+    (total, task) => total + ((task && task.duration) || 0), 
     0
   ) : 0;
 

@@ -390,8 +390,16 @@ const practiceSlice = createSlice({
         // Make sure we handle cases where the backend returns empty arrays or non-array data
         if (Array.isArray(action.payload)) {
           state.loading = false;
-          const serverTasks = action.payload.filter((s) => !s.completed);
-          const serverCompleted = action.payload.filter((s) => s.completed);
+          // Audit fix F3: /practice/history sends duration in SECONDS while
+          // every local task holds MINUTES. The raw seconds used to land in
+          // the store, so any aggregate mixing both sources was wrong by 60x.
+          // Normalize ONCE here - the whole app works in minutes from now on.
+          const normalize = (s) => ({
+            ...s,
+            duration: Math.max(1, Math.round((Number(s.duration) || 0) / 60)),
+          });
+          const serverTasks = action.payload.filter((s) => !s.completed).map(normalize);
+          const serverCompleted = action.payload.filter((s) => s.completed).map(normalize);
           // Audit fix (getHistory wipe): tasks that exist only locally (numeric
           // id, no _id - i.e. created in this browser but not yet saved to the
           // server) used to be deleted by this handler. Keep them.

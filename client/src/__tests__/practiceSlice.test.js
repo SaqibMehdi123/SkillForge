@@ -114,3 +114,39 @@ describe('getHistory must not wipe unsaved local tasks', () => {
     expect(state.tasks.map((t) => t._id)).toContain('srv-unfinished');
   });
 });
+
+describe('F3: history durations are normalized to MINUTES at the store boundary', () => {
+  test('server history (seconds) is converted so local (minutes) and server tasks aggregate consistently', async () => {
+    const prev = { tasks: [], completedTasks: [], currentTask: null };
+    http.onGet('/practice/history').reply(200, [
+      // Server contract: /practice/history sends duration in SECONDS
+      { _id: 'srv-done', skill: 'Guitar', duration: 1800, completed: true }, // = 30 min
+      { _id: 'srv-unfinished', skill: 'Piano', duration: 600, completed: false }, // = 10 min
+    ]);
+
+    const store2 = mockStore({ practice: prev });
+    await store2.dispatch(getHistory());
+
+    const fulfilled = store2.getActions().find((a) => a.type === getHistory.fulfilled.type);
+    const state = reducer(prev, fulfilled);
+
+    // Before the fix the raw 1800 landed in the store (seconds) while local
+    // completedTasks held minutes - every aggregate was wrong for one source.
+    expect(state.completedTasks.find((t) => t._id === 'srv-done').duration).toBe(30);
+    expect(state.tasks.find((t) => t._id === 'srv-unfinished').duration).toBe(10);
+  });
+
+  test('rounding never yields zero minutes for short sessions', async () => {
+    const prev = { tasks: [], completedTasks: [], currentTask: null };
+    http.onGet('/practice/history').reply(200, [
+      { _id: 'srv-brief', skill: 'Sketch', duration: 45, completed: true }, // 45 s -> 1 min
+    ]);
+
+    const store2 = mockStore({ practice: prev });
+    await store2.dispatch(getHistory());
+
+    const fulfilled = store2.getActions().find((a) => a.type === getHistory.fulfilled.type);
+    const state = reducer(prev, fulfilled);
+    expect(state.completedTasks.find((t) => t._id === 'srv-brief').duration).toBe(1);
+  });
+});

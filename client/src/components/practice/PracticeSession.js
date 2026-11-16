@@ -747,7 +747,7 @@ const PracticeSession = () => {
                                 Duration:
                               </Typography>
                               <Typography variant="body2" fontWeight="medium">
-                                {Math.floor(currentTask.duration / 60)} minutes
+                                {currentTask.duration} minutes
                               </Typography>
                             </Box>
                           </Box>
@@ -889,7 +889,7 @@ const PracticeSession = () => {
                                         sx={{ height: 24 }}
                                       />
                                       <Chip 
-                                        label={`${Math.floor(task.duration / 60)} min`} 
+                                        label={`${task.duration} min`} 
                                         size="small" 
                                         variant="outlined"
                                         color="info"
@@ -1034,7 +1034,7 @@ const PracticeSession = () => {
                                         }}
                                       />
                                       <Chip 
-                                        label={`${Math.floor(task.duration / 60)} min`} 
+                                        label={`${task.duration} min`} 
                                         size="small" 
                                         variant="outlined"
                                         icon={<AccessTime style={{fontSize: '0.875rem'}} />}
@@ -1129,7 +1129,7 @@ const PracticeSession = () => {
                               borderRadius: 2
                             }}>
                               <Typography variant="h4" fontWeight="bold" color="warning.main" sx={{ mb: 1 }}>
-                                {completedTasks.reduce((total, task) => total + Math.floor(task.duration / 60), 0)}
+                                {completedTasks.reduce((total, task) => total + (task.duration || 0), 0)}
                               </Typography>
                               <Typography variant="body2" color="text.secondary">
                                 Minutes Practiced
