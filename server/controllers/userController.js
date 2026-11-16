@@ -1,5 +1,5 @@
 const User = require('../models/User');
-const { applyXp } = require('../services/xpService');
+const { applyXp, MAX_XP_PER_REQUEST } = require('../services/xpService');
 const path = require('path');
 const fs = require('fs');
 
@@ -138,8 +138,10 @@ exports.updateXP = async (req, res, next) => {
       return res.status(404).json({ message: 'User not found' });
     }
 
-    // Add XP with the shared level-up rule (audit fix C9)
-    applyXp(user, parseInt(xp, 10));
+    // Add XP with the shared level-up rule (audit fix C9), capped per
+    // request so a spoofed 1e15 payload can neither mint absurd levels
+    // nor stall the event loop (audit fix B5).
+    applyXp(user, Math.min(parseInt(xp, 10) || 0, MAX_XP_PER_REQUEST));
 
     await user.save();
     
