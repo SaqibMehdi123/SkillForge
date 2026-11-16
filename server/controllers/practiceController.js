@@ -22,17 +22,29 @@ exports.startSession = async (req, res, next) => {
 
 exports.completeSession = async (req, res, next) => {
   try {
-    const session = await PracticeSession.findById(req.params.id);
-    if (!session || session.user.toString() !== req.user) {
-      return res.status(404).json({ message: 'Session not found' });
+    // Audit fix B4: claim the session atomically ONLY while it is still
+    // incomplete, so submitting the same completion twice can never pay
+    // out XP/coins twice.
+    const endedAt = new Date();
+    const session = await PracticeSession.findOneAndUpdate(
+      { _id: req.params.id, user: req.user, completed: false },
+      { $set: { completed: true, endedAt } },
+      { new: true }
+    );
+
+    if (!session) {
+      const existing = await PracticeSession.findById(req.params.id).lean();
+      if (!existing || existing.user.toString() !== req.user) {
+        return res.status(404).json({ message: 'Session not found' });
+      }
+      return res.status(409).json({ message: 'Session already completed' });
     }
-    session.completed = true;
-    session.endedAt = new Date();
+
     // Audit fix C9: rewards are computed from real elapsed time on the
     // server - the client's xpEarned/coinsEarned values are ignored.
     const elapsedMinutes = Math.max(
       0,
-      (session.endedAt - (session.startedAt || session.createdAt)) / 60000
+      (endedAt - (session.startedAt || session.createdAt)) / 60000
     );
     const { xpEarned, coinsEarned } = rewardsForDuration(elapsedMinutes);
     session.xpEarned = xpEarned;
@@ -198,6 +210,11 @@ exports.saveSession = async (req, res, next) => {
   try {
     const { skill, category, priority, duration, startedAt, endedAt, completed, image } = req.body;
 
+    // Audit fix B3: `completed: completed || true` made every session
+    // completed:true and paid rewards for sessions the user marked as NOT
+    // completed. Respect an explicit false; default to true only when absent.
+    const isCompleted = completed === undefined ? true : Boolean(completed);
+
     // Audit fix C9: validate the duration and clamp it, then compute the
     // rewards server-side. Client-supplied xpEarned/coinsEarned are ignored.
     if (!isValidDuration(duration)) {
@@ -217,25 +234,28 @@ exports.saveSession = async (req, res, next) => {
       duration: safeDuration,
       startedAt: new Date(startedAt),
       endedAt: new Date(endedAt),
-      completed: completed || true,
-      xpEarned,
-      coinsEarned,
+      completed: isCompleted,
+      xpEarned: isCompleted ? xpEarned : 0,
+      coinsEarned: isCompleted ? coinsEarned : 0,
       notes: req.body.notes || '',
       photo: image ? `/uploads/photos/${image.split('/').pop()}` : null // Save the photo URL if available
     });
 
     console.log('Practice session created:', session._id);
 
-    // Update user XP/coins with the shared level-up rule
+    // Update user XP/coins with the shared level-up rule - only for
+    // completed sessions (B3).
     const user = await User.findById(req.user);
-    if (user) {
+    if (user && isCompleted) {
       applyXp(user, xpEarned);
       user.coins = (user.coins || 0) + coinsEarned;
       await user.save();
     }
 
     // Check and unlock first_steps achievement
-    await checkAndUnlockFirstStepsAchievement(req.user);
+    if (isCompleted) {
+      await checkAndUnlockFirstStepsAchievement(req.user);
+    }
 
     res.status(201).json({ 
       success: true, 
