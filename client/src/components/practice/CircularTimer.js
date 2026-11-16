@@ -345,12 +345,18 @@ const CircularTimer = ({
   const onCompleteRef = useRef(onComplete);
   const onTimeUpdateRef = useRef(onTimeUpdate);
   const remainingTimeRef = useRef(remainingTime);
-  
+  // Audit fix F2: the reset effect must reset on TASK CHANGE only - the old
+  // deps [duration, keyProp] fired on every per-second prop update (the old
+  // parent passed remaining as duration), stopping the worker each second
+  // while the control effect never restarted it: the countdown froze ~1s in.
+  const durationRef = useRef(duration);
+
   useEffect(() => {
     onCompleteRef.current = onComplete;
     onTimeUpdateRef.current = onTimeUpdate;
     remainingTimeRef.current = remainingTime;
-  }, [onComplete, onTimeUpdate, remainingTime]);
+    durationRef.current = duration;
+  }, [onComplete, onTimeUpdate, remainingTime, duration]);
   
   const theme = useTheme();
   const isXs = useMediaQuery(theme.breakpoints.down('sm'));
@@ -366,26 +372,35 @@ const CircularTimer = ({
   const fontSize = isXs ? '2.25rem' : isSm ? '2.75rem' : '3rem';
   
   // Store timing information in localStorage to prevent timer reset on page navigation
+  // F6 companion: persist on TRANSITIONS (play state / completion / task),
+  // not on every 1-second tick - the old effect serialized localStorage on
+  // each tick and, with a webcam screenshot in the task, blew the 5 MB quota
+  // within seconds.
+  // F7 companion: never write BEFORE the restore pass for this task has run,
+  // otherwise the default remaining (60s) overwrites the saved state.
+  const restoredForRef = useRef(null);
   useEffect(() => {
     if (currentTask && currentTask.id) {
+      if (restoredForRef.current !== currentTask.id) return; // restore hasn't run yet
       const timerKey = `timer_${currentTask.id}`;
-      
-      // When the timer changes, save it to localStorage
+
       if (isPlaying) {
         localStorage.setItem(timerKey, JSON.stringify({
-          endTime: Date.now() + (remainingTime * 1000),
-          isRunning: isPlaying,
+          endTime: Date.now() + (remainingTimeRef.current * 1000),
+          isRunning: true,
           completed: timerCompleted
         }));
-      } else if (!isPlaying) {
+      } else {
         localStorage.setItem(timerKey, JSON.stringify({
-          remainingTime: remainingTime,
+          remainingTime: remainingTimeRef.current,
           isRunning: false,
           completed: timerCompleted
         }));
       }
     }
-  }, [remainingTime, isPlaying, timerCompleted, currentTask]);
+    // remainingTime deliberately read via ref - see comment above
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, timerCompleted, currentTask?.id]);
   
   // Initialize the worker
   useEffect(() => {
@@ -423,47 +438,6 @@ const CircularTimer = ({
       }
     };
     
-    // Restore timer state from localStorage if available
-    if (currentTask && currentTask.id) {
-      const timerKey = `timer_${currentTask.id}`;
-      const savedTimer = localStorage.getItem(timerKey);
-      
-      if (savedTimer) {
-        const timerData = JSON.parse(savedTimer);
-        
-        if (timerData.isRunning) {
-          // Calculate remaining time based on saved end time
-          const now = Date.now();
-          const endTime = timerData.endTime;
-          const remaining = Math.max(0, Math.floor((endTime - now) / 1000));
-          
-          if (remaining > 0) {
-            setRemainingTime(remaining);
-            if (onTimeUpdate) {
-              onTimeUpdate(remaining);
-            }
-          } else {
-            // Timer would have completed
-            setRemainingTime(0);
-            setTimerCompleted(true);
-            if (onComplete) {
-              onComplete();
-            }
-            if (onTimeUpdate) {
-              onTimeUpdate(0);
-            }
-          }
-        } else {
-          // Timer was paused
-          setRemainingTime(timerData.remainingTime);
-          setTimerCompleted(timerData.completed);
-          if (onTimeUpdate) {
-            onTimeUpdate(timerData.remainingTime);
-          }
-        }
-      }
-    }
-    
     // Cleanup worker on unmount
     return () => {
       if (workerRef.current) {
@@ -476,16 +450,61 @@ const CircularTimer = ({
     };
   }, []);
   
-  // Reset timer when duration or key changes
+  // Reset timer when the TASK changes (F2: keyProp only - NOT duration,
+  // which used to change every second and stop the worker).
+  // MUST run BEFORE the restore effect below, so a saved timer for the
+  // newly-selected task wins over the full-duration default.
   useEffect(() => {
-    setRemainingTime(duration);
+    setRemainingTime(durationRef.current);
     setTimerCompleted(false);
-    
-    // Stop any running timer
-    if (workerRef.current) {
+
+    // Stop any running timer - but only if a countdown was actually started;
+    // on mount this would otherwise emit a pointless 'stop' before 'start'.
+    if (workerRef.current && startedRef.current) {
       workerRef.current.postMessage({ command: 'stop' });
     }
-  }, [duration, keyProp]);
+  }, [keyProp]);
+
+  // Audit fix F7: restore timer state from localStorage when the task
+  // changes. The old restore ran inside the mount-only worker effect with
+  // raw callbacks (the exact stale-closure pattern C6 fixed) and never
+  // re-ran when a task appeared after mount.
+  // F2: keyed on the task IDENTITY only - currentTask is a new object every
+  // tick, and re-reading localStorage each second would churn the main thread.
+  const taskId = currentTask && currentTask.id;
+  useEffect(() => {
+    if (!taskId) return;
+    const timerKey = `timer_${taskId}`;
+    const savedTimer = localStorage.getItem(timerKey);
+    if (!savedTimer) return;
+
+    try {
+      const timerData = JSON.parse(savedTimer);
+
+      if (timerData.isRunning) {
+        const remaining = Math.max(0, Math.floor((timerData.endTime - Date.now()) / 1000));
+        if (remaining > 0) {
+          setRemainingTime(remaining);
+          if (onTimeUpdateRef.current) onTimeUpdateRef.current(remaining);
+        } else {
+          setRemainingTime(0);
+          setTimerCompleted(true);
+          if (onCompleteRef.current) onCompleteRef.current();
+          if (onTimeUpdateRef.current) onTimeUpdateRef.current(0);
+        }
+      } else {
+        setRemainingTime(timerData.remainingTime);
+        setTimerCompleted(timerData.completed);
+        if (onTimeUpdateRef.current) onTimeUpdateRef.current(timerData.remainingTime);
+      }
+    } catch (err) {
+      // Corrupt saved state must never break the timer
+      localStorage.removeItem(timerKey);
+    }
+    // Mark the restore pass done so the persist effect may write again
+    restoredForRef.current = taskId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keyProp, taskId]);
   
   // Handle visibility change
   useEffect(() => {
@@ -505,22 +524,29 @@ const CircularTimer = ({
   }, [isPlaying, timerCompleted]);
   
   // Main timer control effect
+  // F2: remainingTime is read through its ref - having it in the deps made
+  // the effect re-post 'start' on every tick (pushing the target end time
+  // out and making the countdown run slow) while the reset effect's 'stop'
+  // froze it entirely. Start/stop now follows play-state changes only.
+  const startedRef = useRef(false);
   useEffect(() => {
     if (isPlaying && !inactive && !timerCompleted) {
       // Start the timer worker
       if (workerRef.current) {
+        startedRef.current = true;
         workerRef.current.postMessage({ 
           command: 'start', 
-          remainingTime 
+          remainingTime: remainingTimeRef.current 
         });
       }
     } else {
       // Stop the timer worker
-      if (workerRef.current) {
+      if (workerRef.current && startedRef.current) {
+        startedRef.current = false;
         workerRef.current.postMessage({ command: 'stop' });
       }
     }
-  }, [isPlaying, inactive, timerCompleted, remainingTime]);
+  }, [isPlaying, inactive, timerCompleted]);
   
   // Calculate progress percentage
   const progress = duration > 0 ? ((duration - remainingTime) / duration) * 100 : 0;

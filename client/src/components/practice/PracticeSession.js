@@ -615,7 +615,12 @@ const PracticeSession = () => {
                     }}>
                       <CircularTimer
                         isPlaying={currentTask?.isRunning}
-                        duration={currentTask ? currentTask.remaining : 1800}
+                        // F2: pass the TOTAL duration (minutes -> seconds),
+                        // constant while ticking. The old prop passed
+                        // currentTask.remaining, which changed every second,
+                        // stopped the worker via the reset effect, and froze
+                        // the countdown ~1s after start.
+                        duration={currentTask ? currentTask.duration * 60 : 1800}
                         keyProp={currentTask ? currentTask.id : 'inactive'}
                         onComplete={handleComplete}
                         onStart={() => handleStart(currentTask?.id)}
