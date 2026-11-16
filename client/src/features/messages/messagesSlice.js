@@ -1,4 +1,4 @@
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk, createAction } from '@reduxjs/toolkit';
 import axios from 'axios';
 
 import { API_URL } from '../../config';
@@ -168,6 +168,10 @@ const initialState = {
   error: null,
 };
 
+// R26: dispatched by App's socket subscription when a `message:new` event
+// arrives - see socketService.js
+export const socketMessageReceived = createAction('messages/socketMessageReceived');
+
 const messagesSlice = createSlice({
   name: 'messages',
   initialState,
@@ -262,6 +266,29 @@ const messagesSlice = createSlice({
           });
         }
       })
+      // R26: real-time push from the socket service (App wires it up).
+      .addCase(socketMessageReceived, (state, action) => {
+        const msg = action.payload;
+        if (!msg) return;
+        const senderId = msg.sender?._id || msg.sender;
+
+        // 1. Open conversation: append when it belongs here (dedupe - the
+        //    sender's own REST response may already have added it).
+        if (
+          state.currentConversation.userId &&
+          String(senderId) === String(state.currentConversation.userId)
+        ) {
+          const exists = (state.currentConversation.messages || []).some((m) => m._id === msg._id);
+          if (!exists) state.currentConversation.messages.push(msg);
+        }
+
+        // 2. Conversation list: bump unread / refresh lastMessage.
+        const conv = state.conversations.find((c) => String(c._id) === String(senderId));
+        if (conv) {
+          conv.unreadCount = (conv.unreadCount || 0) + (msg.read ? 0 : 1);
+          conv.lastMessage = msg;
+        }
+      })
       .addCase(sendMessage.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
@@ -281,7 +308,7 @@ const messagesSlice = createSlice({
   },
 });
 
-export const { 
+export const {
   clearMessagesError, 
   setCurrentConversation, 
   clearCurrentConversation,

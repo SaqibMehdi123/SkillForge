@@ -1,4 +1,5 @@
 require('dotenv').config();
+const http = require('http');
 const mongoose = require('mongoose');
 const config = require('./config/env');
 
@@ -6,6 +7,7 @@ const config = require('./config/env');
 // config/env.js has already validated JWT_SECRET / MONGO_URI by this point.
 
 const app = require('./app');
+const { initSocket } = require('./socket');
 
 mongoose
   .connect(config.MONGO_URI, {
@@ -19,7 +21,10 @@ mongoose
 
 if (require.main === module) {
   const PORT = config.PORT;
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  // R26: wrap the Express app in an http.Server so Socket.IO can attach.
+  const httpServer = http.createServer(app);
+  initSocket(httpServer);
+  httpServer.listen(PORT, () => console.log(`Server running on port ${PORT} (REST + Socket.IO)`));
 }
 
 module.exports = app;

@@ -13,7 +13,7 @@ SkillForge is a comprehensive skill development and social learning platform tha
 - **Achievement System**: Gamified learning experience with unlockable achievements 
 - **Social Features**:
   - Friend connections via a request/accept flow
-  - Messaging with read receipts (near-real-time: conversations poll every 15 s)
+  - Real-time messaging with read receipts (Socket.IO push, 60 s polling fallback)
   - Media sharing capabilities
   - Notification system
 - **Profile Management**: Customizable user profiles with stats and achievements
@@ -36,6 +36,7 @@ SkillForge is a comprehensive skill development and social learning platform tha
 - **Mongoose**: MongoDB object modeling
 - **JWT**: Authentication
 - **Bcrypt**: Password hashing
+- **Socket.IO**: Real-time message push (JWT-authenticated handshake)
 - **Multer**: File uploads
 - **Jest + Supertest**: Integration tests (in-memory MongoDB)
 

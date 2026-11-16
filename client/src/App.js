@@ -7,7 +7,8 @@ import { Snackbar, Alert, IconButton, Avatar, Box, Typography, Stack } from '@mu
 import { Close as CloseIcon, Chat as ChatIcon } from '@mui/icons-material';
 import theme from './theme';
 import { loadUser } from './features/auth/authSlice';
-import { getConversations } from './features/messages/messagesSlice';
+import { getConversations, socketMessageReceived } from './features/messages/messagesSlice';
+import { connectSocket, disconnectSocket } from './socketService';
 
 // Components
 import Navbar from './components/layout/Navbar';
@@ -185,13 +186,28 @@ function App() {
     // Initial fetch
     dispatch(getConversations());
     
-    // Set up polling every 15 seconds
+    // R26: Socket.IO pushes arrive instantly; this poll is the reconnect
+    // fallback only (was 15s - the primary real-time path before).
     const interval = setInterval(() => {
       dispatch(getConversations());
-    }, 15000);
+    }, 60000);
     
     return () => clearInterval(interval);
   }, [dispatch, isAuthenticated]);
+
+  // R26: single socket connection while authenticated - pushes new messages
+  // into the store instantly (the poller above is the fallback).
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    connectSocket(token, {
+      onMessageNew: (msg) => dispatch(socketMessageReceived(msg)),
+    });
+
+    return () => disconnectSocket();
+  }, [isAuthenticated, dispatch]);
 
   // Check for new messages and show notifications
   // Audit fix F14: the old version kept prevConversations in state and

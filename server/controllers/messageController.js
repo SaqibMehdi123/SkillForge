@@ -1,6 +1,7 @@
 const Message = require('../models/Message');
 const User = require('../models/User');
 const mongoose = require('mongoose');
+const { emitToUser } = require('../socket');
 
 /**
  * Audit fix S11: a practicePhotoUrl may only reference a photo under the
@@ -79,6 +80,11 @@ exports.sendMessage = async (req, res, next) => {
     // Populate sender details before returning
     await message.populate('sender', 'username avatar');
     await message.populate('recipient', 'username avatar');
+
+    // Audit fix R26: push the message to both users' rooms in real time.
+    // Safe no-op when the socket layer is not attached (REST-only tests).
+    emitToUser(recipientId, 'message:new', message);
+    emitToUser(senderId, 'message:new', message);
 
     res.status(201).json({ data: message });
   } catch (err) {
