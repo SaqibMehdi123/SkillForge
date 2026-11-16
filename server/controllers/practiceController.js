@@ -8,10 +8,18 @@ const fs = require('fs');
 exports.startSession = async (req, res, next) => {
   try {
     const { skill, duration } = req.body;
+    // Audit fix B11: validate at the boundary instead of letting Mongoose
+    // ValidationErrors/CastErrors escape as 500s (or storing garbage).
+    if (!skill || !String(skill).trim()) {
+      return res.status(400).json({ message: 'A skill name is required' });
+    }
+    if (!isValidDuration(duration)) {
+      return res.status(400).json({ message: 'A positive duration (in minutes) is required' });
+    }
     const session = await PracticeSession.create({
       user: req.user,
-      skill,
-      duration,
+      skill: String(skill).trim(),
+      duration: clampDuration(duration),
       startedAt: new Date(),
     });
     res.status(201).json(session);
@@ -223,6 +231,14 @@ exports.saveSession = async (req, res, next) => {
     const safeDuration = clampDuration(duration);
     const { xpEarned, coinsEarned } = rewardsForDuration(safeDuration);
 
+    // Audit fix B11: dates must actually parse, otherwise Mongoose stores
+    // Invalid Date -> CastError -> 500.
+    const started = new Date(startedAt);
+    const ended = new Date(endedAt);
+    if (Number.isNaN(started.getTime()) || Number.isNaN(ended.getTime())) {
+      return res.status(400).json({ message: 'startedAt and endedAt must be valid dates' });
+    }
+
     console.log('Creating new practice session:', { skill, safeDuration });
 
     // Create a new practice session
@@ -232,8 +248,8 @@ exports.saveSession = async (req, res, next) => {
       category: category || 'general',
       priority: priority || 'medium',
       duration: safeDuration,
-      startedAt: new Date(startedAt),
-      endedAt: new Date(endedAt),
+      startedAt: started,
+      endedAt: ended,
       completed: isCompleted,
       xpEarned: isCompleted ? xpEarned : 0,
       coinsEarned: isCompleted ? coinsEarned : 0,

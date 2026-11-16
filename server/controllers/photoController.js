@@ -42,8 +42,12 @@ exports.uploadPhoto = async (req, res, next) => {
       }
     };
     
-    // If sessionId is provided, link this media to the practice session
+    // If sessionId is provided, link this media to the practice session.
+    // Audit fix B11: a garbage sessionId used to surface as a CastError 500.
     if (sessionId) {
+      if (!mongoose.Types.ObjectId.isValid(sessionId)) {
+        return res.status(400).json({ message: 'sessionId must be a valid id' });
+      }
       mediaData.session = new mongoose.Types.ObjectId(sessionId);
     }
     

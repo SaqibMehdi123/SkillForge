@@ -1,15 +1,50 @@
 const Message = require('../models/Message');
 const User = require('../models/User');
 const mongoose = require('mongoose');
-const path = require('path');
-const fs = require('fs');
+
+/**
+ * Audit fix S11: a practicePhotoUrl may only reference a photo under the
+ * server-controlled /uploads/photos/ directory. Accepts a relative path or
+ * an absolute URL on any origin, but always stores the relative path -
+ * arbitrary external URLs (tracking pixels, spoofed content) are rejected.
+ */
+function safePracticePhotoUrl(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  try {
+    const url = new URL(raw.trim(), 'http://resolve.invalid');
+    const match = url.pathname.match(/^\/uploads\/photos\/([A-Za-z0-9._-]+)$/);
+    return match ? `/uploads/photos/${match[1]}` : null;
+  } catch {
+    return null;
+  }
+}
 
 // Send a message
 exports.sendMessage = async (req, res, next) => {
   try {
     const { recipientId, content, practicePhotoUrl } = req.body;
     const senderId = req.user;
-    let image = null;
+
+    // Audit fix B11: validate ids and payload at the boundary.
+    if (!recipientId || !mongoose.Types.ObjectId.isValid(recipientId)) {
+      return res.status(400).json({ message: 'A valid recipientId is required' });
+    }
+    const hasImage = Boolean(req.file);
+    const hasContent = typeof content === 'string' && content.trim().length > 0;
+    const safePhotoUrl = safePracticePhotoUrl(practicePhotoUrl);
+    // S11: an explicit practicePhotoUrl that does not resolve to a
+    // server-controlled photo is rejected outright, even when the message
+    // also carries text.
+    if (hasPhotoUrlInput(practicePhotoUrl) && !safePhotoUrl) {
+      return res.status(400).json({
+        message: 'practicePhotoUrl must reference a photo under /uploads/photos/'
+      });
+    }
+    if (!hasImage && !hasContent && !safePhotoUrl) {
+      return res.status(400).json({
+        message: 'Message must include text, an image, or a practice photo'
+      });
+    }
 
     // Check if recipient exists
     const recipient = await User.findById(recipientId);
@@ -27,15 +62,15 @@ exports.sendMessage = async (req, res, next) => {
     const messageData = {
       sender: senderId,
       recipient: recipientId,
-      content: content || '',
+      content: hasContent ? content.trim() : '',
     };
     
     // Handle image upload if present
     if (req.file) {
       messageData.image = `/uploads/messages/${req.file.filename}`;
-    } else if (practicePhotoUrl) {
-      // If a practice photo URL is provided, use it
-      messageData.image = practicePhotoUrl;
+    } else if (safePhotoUrl) {
+      // Only a validated /uploads/photos/ path is accepted (S11)
+      messageData.image = safePhotoUrl;
     }
 
     // Create and save the message
@@ -50,6 +85,10 @@ exports.sendMessage = async (req, res, next) => {
     next(err);
   }
 };
+
+function hasPhotoUrlInput(raw) {
+  return typeof raw === 'string' && raw.trim().length > 0;
+}
 
 // Get conversation with a specific user
 exports.getConversation = async (req, res, next) => {
@@ -189,48 +228,6 @@ exports.uploadMessageImage = async (req, res, next) => {
 
     const imageUrl = `/uploads/messages/${req.file.filename}`;
     res.status(200).json({ imageUrl });
-  } catch (err) {
-    next(err);
-  }
-};
-
-// Create a new message
-exports.createMessage = async (req, res, next) => {
-  try {
-    const senderId = req.user;
-    const { recipientId, content, practicePhotoUrl } = req.body;
-    
-    // Check if recipient exists
-    const recipient = await User.findById(recipientId);
-    if (!recipient) {
-      return res.status(404).json({ message: 'Recipient not found' });
-    }
-    
-    // Create message data
-    const messageData = {
-      sender: senderId,
-      recipient: recipientId,
-      content,
-    };
-    
-    // Check if there's an uploaded file
-    if (req.file) {
-      // Save image path
-      messageData.image = `/uploads/messages/${req.file.filename}`;
-    } else if (practicePhotoUrl) {
-      // If a practice photo URL is provided, use it
-      messageData.image = practicePhotoUrl;
-    }
-    
-    // Create and save message
-    const message = await Message.create(messageData);
-    
-    // Populate sender details for the response
-    const populatedMessage = await Message.findById(message._id)
-      .populate('sender', 'username avatar')
-      .populate('recipient', 'username avatar');
-    
-    res.status(201).json({ data: populatedMessage });
   } catch (err) {
     next(err);
   }
