@@ -313,7 +313,12 @@ const practiceSlice = createSlice({
           state.tasks[taskIndex].progress = progressPercent;
         }
         
-        savePracticeState(state);
+        // Audit fix F6: persistence intentionally REMOVED from this reducer.
+        // It fired every second and serialized the whole state (including
+        // megabyte base64 screenshots) to localStorage - the 5 MB quota blew
+        // within seconds. The timer survives reloads via CircularTimer's
+        // transition-only `timer_<id>` endTime entry; this slice persists on
+        // real transitions below.
       }
     },
     completeTask: (state) => {
@@ -463,15 +468,31 @@ const practiceSlice = createSlice({
 // Helper function to save practice state to localStorage
 function savePracticeState(state) {
   try {
-    // Only save necessary data for timer persistence
+    // Audit fix F6: strip megabyte base64 data-URL images before persisting.
+    // The in-memory image is needed for the capture/upload flow, but a 1-2 MB
+    // screenshot serialized EVERY SECOND used to exhaust the 5 MB localStorage
+    // quota almost immediately (QuotaExceededError spam + broken restore).
+    const stripImage = (task) => {
+      if (!task) return task;
+      const { image, ...rest } = task;
+      return typeof image === 'string' && image.startsWith('data:') ? rest : task;
+    };
     const stateToSave = {
-      tasks: state.tasks,
-      completedTasks: state.completedTasks,
-      currentTask: state.currentTask,
+      tasks: (state.tasks || []).map(stripImage),
+      completedTasks: (state.completedTasks || []).map(stripImage),
+      currentTask: stripImage(state.currentTask),
     };
     localStorage.setItem('practiceState', JSON.stringify(stateToSave));
   } catch (error) {
+    // F30 hygiene: a full quota must not break the app - drop the persisted
+    // copy rather than spamming errors; the server-side history is the
+    // source of truth for everything except the active timer.
     console.error('Error saving practice state:', error);
+    try {
+      localStorage.removeItem('practiceState');
+    } catch (_) {
+      /* nothing more we can do */
+    }
   }
 }
 

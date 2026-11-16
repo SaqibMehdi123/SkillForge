@@ -370,6 +370,12 @@ const authSlice = createSlice({
       // PrivateRoute silently re-authenticated on the next page load.
       localStorage.removeItem('token');
       localStorage.removeItem('lastStreakUpdate');
+      // Audit fix F30: the next user on a shared machine inherited the
+      // previous user's whole practice workspace. Wipe it.
+      localStorage.removeItem('practiceState');
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith('timer_'))
+        .forEach((k) => localStorage.removeItem(k));
     },
     updateUser: (state, action) => {
       state.user = { ...state.user, ...action.payload };
@@ -504,7 +510,14 @@ const authSlice = createSlice({
       })
       .addCase(updateProfile.fulfilled, (state, action) => {
         state.loading = false;
-        state.user = action.payload;
+        // Audit fix F10: re-normalize the identity exactly like login/register/
+        // loadUser do (C5). Without this, the first profile save or avatar
+        // upload replaced user with the raw server payload (no `id` field) and
+        // Messages.js silently re-broke its own-message detection.
+        state.user = {
+          ...action.payload,
+          id: (action.payload && (action.payload._id || action.payload.id)) || undefined,
+        };
       })
       .addCase(updateProfile.rejected, (state, action) => {
         state.loading = false;
