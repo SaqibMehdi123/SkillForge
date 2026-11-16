@@ -85,21 +85,11 @@ exports.updateProfile = async (req, res, next) => {
   }
 };
 
-exports.addFriend = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user);
-    const friend = await User.findById(req.body.friendId);
-    if (!friend) return res.status(404).json({ message: 'Friend not found' });
-    if (user.friends.includes(friend._id)) {
-      return res.status(400).json({ message: 'Already friends' });
-    }
-    user.friends.push(friend._id);
-    await user.save();
-    res.json({ message: 'Friend added' });
-  } catch (err) {
-    next(err);
-  }
-};
+// Audit fix S2: addFriend was REMOVED. It let any user unilaterally append
+// any other user to their own friends array, bypassing the FriendRequest
+// consent flow - and since sendMessage authorizes on sender.friends, that
+// meant "message any stranger". Friendship now only comes from the
+// request/accept flow (friendRoutes).
 
 exports.getAllUsers = async (req, res, next) => {
   try {

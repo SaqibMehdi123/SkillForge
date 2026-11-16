@@ -15,7 +15,9 @@ router.post('/avatar', auth, upload.single('avatar'), handleUploadError, userCon
 // /users/users/:id segment, so the natural GET /api/users/:id hit nothing.
 // The legacy alias is kept for any old clients.
 router.get('/users/:id', auth, userController.getUserById);
-router.post('/friends', auth, userController.addFriend);
+// Audit fix S2: the legacy POST /friends one-way addFriend route was removed
+// - it bypassed the friend-request consent flow and enabled messaging any
+// stranger. Friendship is created exclusively via /api/friends/requests.
 router.get('/users', auth, userController.getAllUsers);
 // Audit fix C3: the Find Users page calls GET /api/users - serve it at the
 // collection root as well as the legacy /users alias.
