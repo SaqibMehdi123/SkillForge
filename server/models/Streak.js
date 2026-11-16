@@ -5,6 +5,10 @@ const streakSchema = new mongoose.Schema({
   currentStreak: { type: Number, default: 0 },
   longestStreak: { type: Number, default: 0 },
   lastCheckIn: { type: Date },
+  // Audit fix B7: the controller wrote this field but it was missing from
+  // the schema, so Mongoose strict mode silently dropped it and the daily
+  // check-in counter never persisted.
+  todayCheckCount: { type: Number, default: 0 },
   redemptionTokens: { type: Number, default: 0 },
 }, { timestamps: true });
 
