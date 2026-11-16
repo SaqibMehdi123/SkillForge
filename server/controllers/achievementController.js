@@ -1,10 +1,15 @@
 const Achievement = require('../models/Achievement');
 const User = require('../models/User');
-const PracticeSession = require('../models/PracticeSession');
+const Streak = require('../models/Streak');
+const { applyXp } = require('../services/xpService');
+const {
+  STREAK_ACHIEVEMENTS,
+  xpRewardFor,
+} = require('../services/achievementService');
 
 exports.getMyAchievements = async (req, res, next) => {
   try {
-    const achievements = await Achievement.find({ user: req.user });
+    const achievements = await Achievement.find({ user: req.user }).lean();
     res.json(achievements);
   } catch (err) {
     next(err);
@@ -13,15 +18,18 @@ exports.getMyAchievements = async (req, res, next) => {
 
 exports.addAchievement = async (req, res, next) => {
   try {
-    const { type, name, description, icon, badgeId, xpReward } = req.body;
-    
-    // Check if achievement already exists for this user
-    const existingAchievement = await Achievement.findOne({ 
+    const { type, name, description, icon, badgeId } = req.body;
+
+    if (!badgeId || typeof badgeId !== 'string') {
+      return res.status(400).json({ message: 'badgeId is required' });
+    }
+
+    // Check if achievement already exists for this user (idempotent unlock)
+    const existingAchievement = await Achievement.findOne({
       user: req.user,
-      badgeId: badgeId
+      badgeId,
     });
-    
-    // If achievement is already unlocked, just return it
+
     if (existingAchievement) {
       return res.status(200).json({
         success: true,
@@ -29,8 +37,10 @@ exports.addAchievement = async (req, res, next) => {
         message: 'Achievement already unlocked'
       });
     }
-    
-    // Create new achievement
+
+    // Create new achievement - metadata may come from the client, but the
+    // XP reward ALWAYS comes from the server catalog (audit fix S3). The
+    // client's xpReward field is ignored entirely.
     const achievement = await Achievement.create({
       user: req.user,
       type,
@@ -40,39 +50,37 @@ exports.addAchievement = async (req, res, next) => {
       badgeId,
       dateUnlocked: new Date()
     });
-    
-    // Add badge to user
+
     const user = await User.findById(req.user);
     if (user) {
-      // Add the badge ID to user's badges if not already there
       if (!user.badges.includes(badgeId)) {
         user.badges.push(badgeId);
       }
-      
-      // Award XP if specified
-      if (xpReward && xpReward > 0) {
-        user.xp += parseInt(xpReward, 10);
-        
-        // Handle level up (every 100 * level XP)
-        while (user.xp >= user.level * 100) {
-          user.xp -= user.level * 100;
-          user.level += 1;
-          // Bonus coins on level up
-          user.coins += 10;
-        }
+
+      const xpReward = xpRewardFor(badgeId);
+      if (xpReward > 0) {
+        // Shared O(1) level rule (audit fixes C9/B5) - the duplicated
+        // inline while-loop is gone.
+        applyXp(user, xpReward);
       }
-      
+
       await user.save();
+
+      return res.status(201).json({
+        success: true,
+        achievement,
+        user: {
+          badges: user.badges,
+          xp: user.xp,
+          level: user.level
+        },
+        message: 'Achievement unlocked!'
+      });
     }
-    
+
     res.status(201).json({
       success: true,
       achievement,
-      user: {
-        badges: user.badges,
-        xp: user.xp,
-        level: user.level
-      },
       message: 'Achievement unlocked!'
     });
   } catch (err) {
@@ -83,54 +91,22 @@ exports.addAchievement = async (req, res, next) => {
 // Check and award streak-related achievements
 exports.checkStreakAchievements = async (req, res, next) => {
   try {
-    // Get current streak from request
-    const { streak } = req.body;
-    if (!streak) {
-      return res.status(400).json({ message: 'Current streak is required' });
-    }
-    
-    // Get user with their current badges
-    const user = await User.findById(req.user).select('badges xp level streaks');
+    // Audit fix S3: the request body is IGNORED. The streak is read from
+    // the server-computed Streak collection, so a spoofed {"streak": 999}
+    // can no longer unlock badges or mint XP.
+    const streakDoc = await Streak.findOne({ user: req.user }).lean();
+    const currentStreak = streakDoc ? streakDoc.currentStreak || 0 : 0;
+
+    const user = await User.findById(req.user).select('badges xp level coins');
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
-    
-    // Define streak achievements to check
-    const streakAchievements = [
-      {
-        badgeId: 'streak_starter',
-        name: 'Streak Starter',
-        description: 'Maintain a 3-day streak',
-        type: 'streak',
-        icon: 'FireIcon',
-        requiredStreak: 3,
-        xpReward: 150
-      },
-      {
-        badgeId: 'streak_warrior',
-        name: 'Streak Warrior',
-        description: 'Maintain a 7-day streak',
-        type: 'streak',
-        icon: 'FireIcon',
-        requiredStreak: 7,
-        xpReward: 350
-      },
-      {
-        badgeId: 'streak_master',
-        name: 'Streak Master',
-        description: 'Maintain a 30-day streak',
-        type: 'streak',
-        icon: 'FireIcon',
-        requiredStreak: 30,
-        xpReward: 1000
-      }
-    ];
-    
+
     // Identify earned achievements and filter out ones user already has
-    const newAchievements = streakAchievements
-      .filter(ach => streak >= ach.requiredStreak)
+    const newAchievements = STREAK_ACHIEVEMENTS
+      .filter(ach => currentStreak >= ach.requiredStreak)
       .filter(ach => !user.badges.includes(ach.badgeId));
-    
+
     // If no new achievements, return early
     if (newAchievements.length === 0) {
       return res.json({
@@ -139,9 +115,10 @@ exports.checkStreakAchievements = async (req, res, next) => {
         newAchievements: []
       });
     }
-    
+
     // Save new achievements to database
     const savedAchievements = [];
+    let totalXp = 0;
     for (const ach of newAchievements) {
       const achievement = await Achievement.create({
         user: req.user,
@@ -152,28 +129,21 @@ exports.checkStreakAchievements = async (req, res, next) => {
         badgeId: ach.badgeId,
         dateUnlocked: new Date()
       });
-      
-      // Add badge to user
+
       user.badges.push(ach.badgeId);
-      
-      // Award XP
-      user.xp += ach.xpReward;
-      
+      const xpReward = xpRewardFor(ach.badgeId);
+      totalXp += xpReward;
+
       savedAchievements.push({
         ...achievement.toObject(),
-        xpReward: ach.xpReward
+        xpReward
       });
     }
-    
-    // Handle level up
-    while (user.xp >= user.level * 100) {
-      user.xp -= user.level * 100;
-      user.level += 1;
-      user.coins += 10;
-    }
-    
+
+    // Shared O(1) level rule (audit fixes C9/B5) instead of a duplicated loop
+    applyXp(user, totalXp);
     await user.save();
-    
+
     res.json({
       success: true,
       message: 'New streak achievements earned!',
@@ -187,4 +157,4 @@ exports.checkStreakAchievements = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-}; 
+};

@@ -165,11 +165,19 @@ exports.updateXP = async (req, res, next) => {
 exports.updateStreak = async (req, res, next) => {
   try {
     const { streak, bestStreak } = req.body;
-    
+
     const user = await User.findById(req.user);
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
+
+    // Audit fix S3: values must be numeric and are clamped to sane bounds -
+    // the old code parseInt'ed anything (NaN, 9999999) straight into the doc.
+    const clamp = (v) => {
+      const n = Math.round(Number(v));
+      if (!Number.isFinite(n) || n < 0) return null;
+      return Math.min(n, 9999);
+    };
 
     // Initialize streaks object if it doesn't exist
     if (!user.streaks) {
@@ -178,12 +186,20 @@ exports.updateStreak = async (req, res, next) => {
 
     // Update current streak if provided
     if (streak !== undefined) {
-      user.streaks.current = parseInt(streak, 10);
+      const clamped = clamp(streak);
+      if (clamped === null) {
+        return res.status(400).json({ message: 'streak must be a non-negative number' });
+      }
+      user.streaks.current = clamped;
     }
-    
+
     // Update best streak if provided or if current streak is higher
     if (bestStreak !== undefined) {
-      user.streaks.best = parseInt(bestStreak, 10);
+      const clamped = clamp(bestStreak);
+      if (clamped === null) {
+        return res.status(400).json({ message: 'bestStreak must be a non-negative number' });
+      }
+      user.streaks.best = clamped;
     } else if (user.streaks.current > user.streaks.best) {
       user.streaks.best = user.streaks.current;
     }
